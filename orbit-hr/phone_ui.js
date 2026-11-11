@@ -61,7 +61,7 @@ function mNews() {
 }
 function mobileHome() {
   const u = me(), h = nowDate().getHours(), pc = (isHR() || isMgr()) ? pendingCount() : 0;
-  return `<div class="mhome" id="mhome"><header class="mh-top"><div><small>${nowDate().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</small><h1>${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}, ${esc(u.name.split(' ')[0])}</h1></div><a href="#/employees/${u.id}" aria-label="My profile">${avatar(u)}</a></header>
+  return `<div class="mhome" id="mhome"><header class="mh-top"><div><small>${nowDate().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' })}</small><h1>${h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'}, ${esc(u.name.split(' ')[0])}</h1></div><button type="button" class="mh-me" data-act="photo_change" aria-label="My profile photo">${avatar(u)}</button></header>
     ${mHero()}${pc ? `<a class="mh-alert" href="#/leave">${mIc('bell')}<span>${pc} approval${pc > 1 ? 's' : ''} waiting for you</span>${mSvg('M9 6l6 6-6 6')}</a>` : ''}${mWeek()}${mTiles()}${mQuick()}${mNews()}</div>`;
 }
 { const _d = PAGE_FN.dashboard; PAGE_FN.dashboard = () => (mPhone() && SESSION && tabOf('dash', 'my') === 'my') ? mobileHome() : _d(); }
@@ -89,7 +89,7 @@ document.head.insertAdjacentHTML('beforeend', `<style>
 .mh-top{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:2px 2px 0}
 .mh-top>div{min-width:0}.mh-top small{display:block;font-size:12px;font-weight:600;color:var(--muted)}
 .mh-top h1{font-size:22px;line-height:1.2;font-weight:800;letter-spacing:-.02em;overflow-wrap:anywhere}
-.mh-top a{flex:none}.mh-top .avatar{width:42px;height:42px;font-size:14px}
+.mh-top .mh-me{flex:none;padding:0;border:0;background:none;border-radius:50%;cursor:pointer;min-height:0}.mh-top .avatar{width:42px;height:42px;font-size:14px}
 .mh-hero{background:var(--mh-ink);color:#fff;border-radius:28px;padding:16px}
 .mh-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
 .mh-chip{flex:none;display:inline-flex;align-items:center;gap:7px;font-size:12px;font-weight:700;background:#ffffff14;padding:6px 11px;border-radius:99px;white-space:nowrap}
