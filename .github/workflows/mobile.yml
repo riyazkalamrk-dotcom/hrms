@@ -39,9 +39,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: 21 }
-      - uses: android-actions/setup-android@v3
       - run: npm ci || npm install
       - run: npm run setup -- --web "$WEB" --server "$SERVER" --id "$APP_ID" --name "$APP_NAME" --only android --iconserver "$SERVER"
       - run: npm run android:apk
@@ -75,9 +74,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with: { distribution: temurin, java-version: 21 }
-      - uses: android-actions/setup-android@v3
       - run: npm ci || npm install
       - name: Firebase + signing files
         env:
