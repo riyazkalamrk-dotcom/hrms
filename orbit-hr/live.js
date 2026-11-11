@@ -21,6 +21,12 @@ seed = function () {
 /* starter lists: one location to rename, no sample people-linked records */
 Object.assign(SEEDS, { branches: [{ id: 'B1', name: 'Head Office', addr: '', type: 'office', status: 'Active' }], loans: [], advances: [], promotions: [], resignations: [], terminations: [], warnings: [], complaints: [], awards: [], assets: [], assethist: [], meetings: [], appointments: [], docreq: [], visits: [], evals: [], sticky: [] });
 
+/* every new account or reset gets its own random temporary password, shown once to the person who created it */
+function tempPass() { const A = 'ABCDEFGHJKMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789', b = new Uint32Array(10); crypto.getRandomValues(b); return Array.from(b, v => A[v % A.length]).join(''); }
+function showTempPass(id, pw) { const e = emp(id); if (!e) return; modal('Temporary password — ' + esc(e.name), `<p class="muted" style="margin-top:0">Give this to ${esc(e.name.split(' ')[0])} privately. It is shown only once and they should change it after signing in.</p><div class="row" style="gap:10px;align-items:center;background:var(--surface2);border:1px solid var(--line);border-radius:14px;padding:12px 14px"><div style="flex:1;min-width:0"><div class="muted small">Sign-in email</div><b style="overflow-wrap:anywhere;user-select:text;-webkit-user-select:text">${esc(e.email)}</b><div class="muted small" style="margin-top:8px">Temporary password</div><b style="font-size:20px;letter-spacing:.06em;font-family:ui-monospace,Consolas,monospace;user-select:text;-webkit-user-select:text">${esc(pw)}</b></div><button type="button" class="btn sm" data-copy="${esc(pw)}">Copy</button></div>`, null, '', false); }
+function tempPassFor(id) { const pw = tempPass(); setTimeout(() => showTempPass(id, pw), 350); return pw; }
+document.addEventListener('click', e => { const b = e.target.closest?.('[data-copy]'); if (!b) return; navigator.clipboard?.writeText(b.dataset.copy).then(() => toast('Copied'), () => toast('Select the text and copy it', 'err')); });
+
 /* first-time setup: shown instead of sign-in while there are no accounts on this device */
 function setupView() {
   $('#app').innerHTML = `<div class="login"><section class="login-form" style="width:100%"><div class="login-card" style="max-width:460px">
@@ -37,10 +43,11 @@ function setupView() {
     <label class="f">Confirm password<input class="input" name="p2" type="password" required minlength="8" autocomplete="new-password"></label>
     <div id="serr" class="small" style="color:var(--red);min-height:18px"></div>
     <button class="btn primary" style="justify-content:center;padding:11px">Create administrator account</button>
-   </form><p class="small muted" style="margin-top:16px">Already set up on another device? Employee records are stored per device for now — see the setup guide before rolling out to staff.</p></div></section></div>`;
+   </form><p class="small muted" style="margin-top:16px">This creates the company workspace on your server. Everyone else then signs in with the account you create for them.</p></div></section></div>`;
   $('#sf').addEventListener('submit', e => {
     e.preventDefault(); const d = Object.fromEntries(new FormData(e.target)), err = t => { $('#serr').textContent = t; };
     const name = d.name.trim().replace(/\s+/g, ' '); if (name.length < 3) return err('Enter your full name.'); if (d.p1 !== d.p2) return err('The two passwords do not match.'); if (d.p1.length < 8) return err('Use at least 8 characters for the password.');
+    if (window.SYNC_ON) { const btn = e.target.querySelector('button'); btn.disabled = true; return window.syncSetup({ ...d, name }, t => { err(t); btn.disabled = false; }); }
     if (DB.employees.length) return loginView();
     const depts = rows('departments'), dept = depts.find(x => /manage/i.test(x.title))?.title || depts[0]?.title || 'Management';
     DB.company = d.company.trim(); DB.employees.push({ id: 'E001', name, email: d.email.trim().toLowerCase(), pass: d.p1, role: 'admin', title: d.title.trim() || 'Administrator', dept, mgr: null, salary: 0, joined: TODAY(), dob: d.dob, gender: '', phone: d.phone.trim(), loc: '', status: 'Active', exit: null, skills: [], color: COLORS[0], emergency: '', branch: 'B1' });
@@ -48,4 +55,4 @@ function setupView() {
     toast('Workspace ready. Next: Settings → company profile, Locations, then add your people.');
   });
 }
-{ const _lv = loginView; loginView = function () { if (DB && !DB.employees.length) return setupView(); return _lv(); }; }
+{ const _lv = loginView; loginView = function () { if (!window.SYNC_ON && DB && !DB.employees.length) return setupView(); return _lv(); }; }

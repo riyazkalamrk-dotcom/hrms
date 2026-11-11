@@ -5,8 +5,8 @@ Everything for the HRMS lives in this folder.
 | Folder / file | What it is |
 |---|---|
 | `orbit-hr/` | The web app (plain JavaScript, one file per feature) and its Node server |
-| `orbit-hr/server.js`, `server_cfg.js`, `server_bot.js` | Server: static files, attendance verification, push, chat, tracking, settings/integrations, WhatsApp bot, AI proxy |
-| `orbit-hr/data/` | Server secrets and state: `admin.key`, `config.json` (API keys), `vapid.json`, `secret.txt`, `state.json`. **Back it up; never share or commit it.** |
+| `orbit-hr/server.js`, `server_cfg.js`, `server_bot.js`, `server_db.js` | Server: static files, shared database and sign-in, attendance verification, push, chat, tracking, settings/integrations, WhatsApp bot, AI proxy |
+| `orbit-hr/data/` | Server data: `db.json` (employee database), `auth.json` (password hashes), `backups/`, `admin.key`, `config.json` (API keys), `vapid.json`, `secret.txt`, `state.json`. **Back it up; never share or commit it.** |
 | `orbit-hr/mobile/` | Android + iOS app projects (Capacitor), build scripts and `README.md` with store steps |
 | `orbit-hr/mobile/dist/OrbitHRMS-debug.apk` | Latest Android test build |
 
@@ -43,5 +43,5 @@ See [GO-LIVE.md](GO-LIVE.md) for the full setup guide and the go-live checklist.
 ## Good to know
 
 - The app ships with no demo data. The first person to open it creates the administrator account.
-- Employee data (attendance, leave, payroll) is stored in each browser / phone app, not on the server yet. Read section 1 of GO-LIVE.md before rolling out to staff.
+- Employee data lives in one shared database on the server (`orbit-hr/data/db.json`). Every device signs in to the server and syncs with it. Read section 1 of GO-LIVE.md for the current limits.
 - Branding, company profile and API keys are stored on the server in `orbit-hr/data/config.json`.

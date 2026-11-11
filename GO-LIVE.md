@@ -9,35 +9,24 @@ Read section 1 before giving the app to staff. It explains one limit that decide
 **What is live-ready**
 
 - No demo people, logins, attendance, payroll, documents or simulated tracking. A new install starts empty.
-- The first person to open the app creates the administrator account.
-- Branding, company profile and every third-party API key are set from Settings and stored on your server.
-- Attendance checks (geo-fence, GPS anti-spoofing, face match) run for real.
+- **One shared database on your server.** Every phone and browser signs in to the server and sees the same data. A change on one device reaches the others within about 5 seconds.
+- Sign-in is checked on the server. Passwords are stored only as salted hashes in `orbit-hr/data/auth.json` and are never sent to any device.
+- Each device receives only what its user may see. Staff do not receive other people's salary, bank details, documents, face templates, tickets, expense claims or disciplinary records. Managers also receive their own team's attendance, leave and claims. HR and admins receive everything.
+- The server refuses changes a person is not allowed to make: editing someone else's record, approving their own request, changing settings, payroll or roles.
+- With no connection the app keeps working on its saved copy. Unsent changes are stored on the device and sent when the server is reachable again.
+- Branding, company profile and every third-party API key are set from Settings and stored on the server.
 
-**The limit you must plan around: employee data is stored per device**
+**Limits you should know**
 
-Employees, attendance, leave, payroll and documents are saved inside each browser or phone app, not in one shared database on the server.
-
-- An employee you add on the office PC does not appear on that employee's phone.
-- A check-in made on a phone is not visible to HR on another device.
-- Passwords are stored in the device's browser storage in plain text.
-
-What this means in practice:
-
-| Way of working | Works today? |
-|---|---|
-| One shared device (an office PC or a kiosk tablet at the site) where everyone signs in | Yes |
-| HR keeps all records on one PC | Yes |
-| Every employee uses the app on their own phone and HR sees it centrally | **No — needs the shared server database (not built yet)** |
-
-Until the shared database is built, do not tell staff their phone check-ins are recorded centrally. Live tracking, team chat and push alerts already go through the server and do work across devices.
-
-**Other limits**
-
-- Team chat and live tracking do not verify who is sending (no server sign-in yet).
-- "Forgot password" does not send an email. HR or an admin resets passwords.
+- **Uploaded files are not shared yet.** KYC document scans, policy attachments and letter files stay on the device that uploaded them. The records about them are shared; the files are not.
+- **Team chat and live tracking** do not check who is sending. Treat chat as non-confidential.
+- **Server rules are broad, not field by field.** They stop the cases listed above, but a technically skilled employee could still alter some of their own records, for example their own attendance times. HR should review the audit log and flagged punches.
+- **"Forgot password" does not send an email.** HR or an admin opens the person's profile and presses Reset password, which shows a new temporary password once.
+- **Two people editing the same record at the same moment:** the last save wins for that record.
 - The iPhone app cannot be installed on real phones until you have an Apple Developer account.
 - Policies come with eight template documents. Rewrite or remove them before publishing to staff.
 - The holiday list is a default national list. Check it against your state's calendar.
+- Nothing has been tested on a real phone yet. Do the checklist in section 9 before rollout.
 
 ---
 
@@ -62,7 +51,7 @@ The app is then at `http://<server-address>:5173`.
 
 **Use https for real use.** Phones block camera, location and push on plain `http` addresses (except your own Wi-Fi during testing). Put the server behind a reverse proxy with a certificate (Caddy, Nginx or your host's panel) and use an address like `https://hr.yourcompany.com`.
 
-**Back up `orbit-hr/data/`.** It holds your API keys, admin key, push keys and server state. Never share it or commit it. It is excluded from Git.
+**Back up `orbit-hr/data/`.** It holds the employee database (`db.json`), password hashes (`auth.json`), your API keys, admin key and push keys. Never share it or commit it. It is excluded from Git. The server also keeps one copy of the database per day for 14 days in `orbit-hr/data/backups/`.
 
 **Keep it running.** On Linux use `pm2 start server.js --name orbit-hr` or a systemd service. On Windows use Task Scheduler or NSSM.
 
@@ -75,7 +64,7 @@ The app is then at `http://<server-address>:5173`.
 3. Add your profile photo when asked. Every user must add one before using the app.
 4. You are now signed in as the administrator (employee ID `E001`).
 
-Do this on the device that will hold the records (see section 1).
+This creates the workspace on the server. It can be done once only; after that everyone signs in.
 
 ---
 
@@ -119,7 +108,7 @@ Do these in order.
 ## 6. Adding people
 
 1. **People → Add employee** for each person. Set role, department, manager, branch and salary.
-2. Give each person their work email and starting password. Ask them to change it at first sign-in (profile → Change password).
+2. When you save a new person the app shows a random temporary password once. Give it to them privately with their work email. Ask them to change it at first sign-in (profile → Change password).
 3. At first sign-in each person adds a profile photo.
 4. For face check-in, each person enrols their face once under **Attendance → Secure check-in**.
 5. Add bank details and KYC documents from each profile. Nothing is pre-filled.
@@ -156,8 +145,10 @@ Every push to `main` builds a test Android APK and compiles the iPhone app. Set 
 
 ## 8. Daily running
 
-- **Backups:** Settings → Data → **Export JSON** on the device that holds the records. Do this daily until the shared database exists. Also back up `orbit-hr/data/`.
-- **Erase all data:** Settings → Data → **Erase all data** wipes that device and returns to first-time setup.
+- **Backups:** copy the whole `orbit-hr/data/` folder to another machine or cloud drive regularly. An admin can also use Settings → Data → **Export JSON**.
+- **Restore:** stop the server, put a backup `db.json` (and `auth.json`) back into `orbit-hr/data/`, start the server.
+- **Start over:** stop the server, move `db.json`, `auth.json` and `sessions.json` out of `orbit-hr/data/`, start the server. The app returns to first-time setup.
+- **Lost admin password:** another admin or HR user resets it from the profile page. If nobody can sign in, restore from a backup or start over.
 - **Old demo data:** the first time this version opens on a device that had the demo, the demo workspace is removed. One copy is kept in the browser under `orbit_demo_backup` in case real entries were made in it.
 
 ---
@@ -172,6 +163,6 @@ Every push to `main` builds a test Android APK and compiles the iPhone app. Set 
 - [ ] Policies rewritten for your company
 - [ ] Holiday list checked
 - [ ] Employees added with roles and managers
-- [ ] Test on a real phone: sign in, add photo, check in inside the fence, check in outside the fence, face check-in, check out early with a reason
+- [ ] Test on two real phones: sign in, add photo, check in inside the fence, check in outside the fence, face check-in, check out early with a reason, and confirm HR sees each one on another device
 - [ ] Android app rebuilt with the real server address
-- [ ] Decision made on the shared server database (section 1) before staff use their own phones
+- [ ] `orbit-hr/data/` copied to a second location on a schedule

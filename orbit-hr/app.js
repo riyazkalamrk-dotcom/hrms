@@ -54,7 +54,7 @@ function seed() {
     settings: { quota: { CL: 12, SL: 10, EL: 15, CO: 2 }, shiftStart: '09:30', lateAfter: '09:45' } };
 }
 let DB; const load = () => { try { DB = JSON.parse(localStorage.getItem(KEY)); } catch { } if (!DB || DB.v !== 1) { DB = seed(); save(); } };
-const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { } };
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(DB)); } catch { } try { window.syncHook?.(); } catch { } };
 const log = msg => { DB.audit.unshift({ ts: Date.now(), who: SESSION ? me().name : 'System', msg }); DB.audit.length = Math.min(DB.audit.length, 200); };
 const notify = (to, msg) => { DB.notes.unshift({ id: uid('n'), to, msg, ts: Date.now(), read: false }); try { window.notifyHook?.(to, msg); } catch { } };
 

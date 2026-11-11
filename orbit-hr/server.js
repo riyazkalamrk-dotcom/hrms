@@ -128,10 +128,12 @@ const str = (v, n) => String(v ?? '').slice(0, n);
 
 /* origins the Android / iOS apps run from (+ any in CORS_ORIGINS, comma separated) */
 const APP_ORIGINS = new Set(['capacitor://localhost', 'ionic://localhost', 'https://localhost', 'http://localhost', ...(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)]);
+const SDB = require('./server_db.js')(DATA, json);
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname;
-  { const o = req.headers.origin; if (o && APP_ORIGINS.has(o)) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS'); if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); } } }
+  { const o = req.headers.origin; if (o && APP_ORIGINS.has(o)) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-orbit-token'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS'); if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); } } }
   try {
+    if (p.startsWith('/api/db/') && await SDB.handle(req, res, u, p)) return;
     if (p.startsWith('/api/') && await CFGM.handle(req, res, u, p)) return;
     if ((p.startsWith('/api/') || p === '/manifest.webmanifest' || p.startsWith('/pwa/')) && await BOT.handle(req, res, u, p)) return;
     /* app download page + the Android APK (only this one file from mobile/dist is public) */
@@ -157,7 +159,7 @@ http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) return json(res, 404, { error: 'not found' });
     // static
     let f = path.normalize(path.join(ROOT, p === '/' ? 'index.html' : decodeURIComponent(p)));
-    if (!f.startsWith(ROOT) || f.startsWith(DATA) || f.startsWith(path.join(ROOT, 'mobile')) || f.startsWith(path.join(ROOT, 'node_modules')) || ['server.js', 'server_cfg.js', 'server_bot.js'].includes(path.basename(f))) { res.writeHead(403); return res.end('Forbidden'); }
+    if (!f.startsWith(ROOT) || f.startsWith(DATA) || f.startsWith(path.join(ROOT, 'mobile')) || f.startsWith(path.join(ROOT, 'node_modules')) || ['server.js', 'server_cfg.js', 'server_bot.js', 'server_db.js'].includes(path.basename(f))) { res.writeHead(403); return res.end('Forbidden'); }
     fs.readFile(f, (e, d) => { if (e) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(d); });
   } catch (e) { json(res, 500, { error: String(e.message) }); }
 }).listen(PORT, () => console.log('Orbit HR server on http://localhost:' + PORT));
