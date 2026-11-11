@@ -30,13 +30,18 @@ npm install
 set ORBIT_ANDROID_SDK=C:\Users\Lenovo\ot\sdk
 set ORBIT_JAVA_HOME=C:\Users\Lenovo\ot\jdk
 set GRADLE_USER_HOME=C:\Users\Lenovo\ot\gh
-npm run setup -- --server http://192.168.1.103:5173 --iconserver http://localhost:5173 --only android
+npm run setup -- --server http://<this-PC-IP>:5173 --iconserver http://localhost:5173 --only android
 npm run android:apk
 ```
 
 For a real release use an `https://` server address. iOS needs a Mac — see `orbit-hr/mobile/README.md`.
 
+## Going live
+
+See [GO-LIVE.md](GO-LIVE.md) for the full setup guide and the go-live checklist.
+
 ## Good to know
 
-- Employee data (attendance, leave, payroll) is stored in each browser / phone app, not on the server yet.
+- The app ships with no demo data. The first person to open it creates the administrator account.
+- Employee data (attendance, leave, payroll) is stored in each browser / phone app, not on the server yet. Read section 1 of GO-LIVE.md before rolling out to staff.
 - Branding, company profile and API keys are stored on the server in `orbit-hr/data/config.json`.

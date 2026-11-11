@@ -25,7 +25,7 @@ function ensureRoster() {
   DB.roster ??= {}; const sh = rows('shifts');
   [['Morning Shift', '07:00', '15:00', 'M'], ['General Shift', '09:30', '18:30', 'G'], ['Evening Shift', '13:00', '21:00', 'E']].forEach(([name, start, end, code]) => { if (!sh.some(s => s.name === name)) { const n = Math.max(0, ...sh.map(s => +String(s.id).replace(/\D/g, '') || 0)) + 1; sh.push({ id: 'S' + n, name, start, end, maxOT: 2, tardy: 'Yes', code }); } });
   [['Office Shift', 'OF'], ['Site Shift', 'ST'], ['Sales Shift', 'SL']].forEach(([n, c]) => { const s = shiftByName(n); if (s && !s.code) s.code = c; });
-  DB.settings.minCover ??= 50; if (DB.rosterV >= 2) return; DB.rosterV = 2; DB.roster = {}; DB.swaps = [];
+  DB.settings.minCover ??= 50; if (DB.rosterV >= 2) return; DB.rosterV = 2; DB.roster ??= {}; DB.swaps ??= []; save(); return; /* live: HR builds the roster; no generated history */
   const T = TODAY(), R = rng(77), from = addDays(T, -60), to = addDays(T, 35), byDept = {};
   DB.employees.filter(e => e.status !== 'Exited').forEach(e => (byDept[e.dept] ??= []).push(e)); Object.values(byDept).forEach(a => a.sort((x, y) => x.id < y.id ? -1 : 1));
   for (let d = from; d <= to; d = addDays(d, 1)) { if (isHoliday(d)) continue; DB.employees.forEach(e => { if (e.status === 'Exited' && !(e.exit && d <= e.exit)) return; if (d < e.joined || (e.exit && d > e.exit)) return; const i = (byDept[e.dept] || []).indexOf(e); setAssign(e.id, d, patternAssign(Math.max(0, i), e, d, { off: 'one', shift: ROT_DEPTS.includes(e.dept) ? 'rot3' : 'keep' })); }); }

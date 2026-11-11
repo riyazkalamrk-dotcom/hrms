@@ -93,16 +93,8 @@ CHG.pref2 = el => { prefsFor()[el.dataset.k] = el.dataset.k === 'briefing' ? el.
 ACT.brief_now = () => showBriefing();
 function applyPrefs() { const p = SESSION && DB.prefs?.[SESSION.id] || {}, r = document.documentElement; r.dataset.motion = p.motionOff ? 'off' : ''; r.dataset.density = p.compact ? 'compact' : ''; }
 
-/* ================= LOGIN: role preview ================= */
-ACT.demo = el => {
-  const u = el.dataset.u, key = { 'aarav.mehta': 'admin', 'priya.nair': 'hr', 'rohan.iyer': 'manager', 'sneha.kapoor': 'employee' }[u.split('@')[0]], info = ROLE_INFO[key];
-  $('#em').value = u; $('#pw').value = 'demo123'; $$('.demo-chip').forEach(c => c.classList.toggle('sel', c === el));
-  $('#rolepreview').innerHTML = `<div class="rp"><div class="row"><span class="badge acc">${info.label}</span><b>Lands on: ${info.land}</b></div><ul>${info.see.map((x, i) => `<li style="--i:${i}">${x}</li>`).join('')}</ul><button type="button" class="btn primary" style="width:100%;justify-content:center" data-act="demo_go">Continue as ${info.label} →</button></div>`;
-};
-ACT.demo_go = () => $('#lf').requestSubmit();
 
 /* ================= wiring ================= */
-const _lv = loginView; loginView = function () { _lv(); if (!$('#rolepreview')) $('.demo-chips')?.insertAdjacentHTML('afterend', '<div id="rolepreview"><div class="muted small" style="margin-top:12px">👆 Pick a role to preview what that person sees when they sign in.</div></div>'); };
 const _r7 = render;
 render = function () { _r7(); applyPrefs(); if (SESSION && !briefedThisLoad) { briefedThisLoad = true; const p = prefsFor(); if (p.briefing !== false && p.briefDate !== TODAY()) { p.briefDate = TODAY(); save(); setTimeout(showBriefing, 700); } }
   const meb = $('.side .me'); if (meb && !$('#prefbtn')) meb.querySelector('[data-act=logout]')?.insertAdjacentHTML('beforebegin', `<a class="icon-btn" id="prefbtn" href="#/preferences" title="Preferences" style="color:#cbd">${ic('settings')}</a>`); };

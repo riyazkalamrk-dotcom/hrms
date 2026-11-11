@@ -23,10 +23,10 @@ const pick = (a, r) => a[Math.floor(r() * a.length)];
 /* ---------- data migration: richer profile fields, break history, notes ---------- */
 function ensureStaffData() {
   DB.employees.forEach((e, i) => {
-    if (e.religion) return; const r = rng(i * 17 + 3);
-    Object.assign(e, { religion: pick(['Hindu', 'Muslim', 'Christian', 'Sikh', 'Jain'], r), marital: pick(['Single', 'Married', 'Married'], r), blood: pick(['A+', 'B+', 'O+', 'AB+', 'O-', 'A-'], r), country: 'India', address: e.address || '', bank: e.bank || '', payType: 'Monthly', contract: { type: e.status === 'Onboarding' ? 'Probation' : 'Permanent', start: e.joined, end: e.status === 'Onboarding' ? addDays(e.joined, 180) : '', notice: 60 } });
+    if (e.country) return;
+    Object.assign(e, { religion: e.religion || '', marital: e.marital || '', blood: e.blood || '', country: 'India', address: e.address || '', bank: e.bank || '', payType: 'Monthly', contract: { type: e.status === 'Onboarding' ? 'Probation' : 'Permanent', start: e.joined, end: e.status === 'Onboarding' ? addDays(e.joined, 180) : '', notice: 60 } });
   });
-  DB.employees.forEach(e => { for (const [, r] of Object.entries(DB.att[e.id] || {})) if (r.out && !r.breaks) r.breaks = [{ s: '13:15', e: '14:00', why: 'Lunch' }]; });
+  DB.employees.forEach(e => { for (const [, r] of Object.entries(DB.att[e.id] || {})) if (r.out && !r.breaks) r.breaks = []; });
   rows('sticky').forEach(n => { n.priority ??= 'Medium'; n.title ??= ''; });
   DB.notes.forEach(n => { n.seenAt ??= n.read ? n.ts : null; });
 }

@@ -15,7 +15,7 @@ function startExit(e, date, why) {
 }
 
 /* ---------- seeds ---------- */
-SEEDS.branches = [{ id: 'B1', name: 'Head Office — Bengaluru', addr: 'MG Road, Bengaluru' }, { id: 'B2', name: 'Skyline Heights — Site Office', addr: 'Whitefield, Bengaluru' }, { id: 'B3', name: 'Green Meadows — Site Office', addr: 'Sarjapur Road, Bengaluru' }];
+SEEDS.branches = [{ id: 'B1', name: 'Head Office', addr: '', type: 'office', status: 'Active' }];
 SEEDS.shifts = [{ id: 'S1', name: 'Office Shift', start: '09:30', end: '18:30', maxOT: 2, tardy: 'Yes' }, { id: 'S2', name: 'Site Shift', start: '08:00', end: '17:00', maxOT: 3, tardy: 'Yes' }, { id: 'S3', name: 'Sales Shift', start: '10:00', end: '19:00', maxOT: 3, tardy: 'Yes' }];
 SEEDS.departments = DEPTS.map((d, i) => ({ id: 'D' + (i + 1), title: d, shift: ['Sales', 'Channel Partners', 'Marketing & CRM'].includes(d) ? 'Sales Shift' : ['Site Operations', 'Property Management'].includes(d) ? 'Site Shift' : 'Office Shift', reason: 'Yes', status: 'Active' }));
 SEEDS.designations = [...new Set(['Managing Director', 'Head of HR & Admin', 'Sales Manager', 'Senior Sales Executive', 'Sales Executive', 'Site Sales Executive', 'Pre-sales Executive', 'Telecaller', 'Project Manager', 'Site Engineer', 'Senior Architect', 'Site Supervisor', 'Channel Partner Manager', 'Channel Sales Associate', 'Documentation Executive', 'Legal Executive', 'Marketing & CRM Head', 'Digital Marketing Executive', 'CRM Executive', 'Finance Controller', 'Accountant', 'Property Manager', 'Facility Executive', 'HR Executive'])].map((t, i) => ({ id: 'G' + i, title: t, status: 'Active' }));
@@ -24,18 +24,18 @@ SEEDS.allowances = [{ id: 'A1', name: 'Conveyance', taxable: 'Partial', exempt: 
 SEEDS.deductions = [{ id: 'X1', name: 'Health insurance premium', dtype: 'Pre-tax', amtType: 'Fixed', amount: 500, status: 'Inactive' }, { id: 'X2', name: 'Staff welfare fund', dtype: 'Post-tax', amtType: 'Fixed', amount: 100, status: 'Inactive' }];
 SEEDS.taxslabs = [[0, 400000, 0], [400000, 800000, 5], [800000, 1200000, 10], [1200000, 1600000, 15], [1600000, 2000000, 20], [2000000, 2400000, 25], [2400000, 0, 30]].map((s, i) => ({ id: 'TS' + i, min: s[0], max: s[1], rate: s[2], status: 'Active' }));
 SEEDS.pfslabs = [{ id: 'PF1', min: 0, max: 99999999, empRate: 12, coRate: 12, gender: 'All', status: 'Active' }];
-SEEDS.loans = [{ id: 'LN1', emp: 'E004', amount: 60000, installment: 10000, start: addDays(TODAY(), -35), reason: 'Laptop purchase', status: 'Approved' }, { id: 'LN2', emp: 'E014', amount: 30000, installment: 5000, start: addDays(TODAY(), 20), reason: 'Medical', status: 'Pending' }];
-SEEDS.advances = [{ id: 'AD1', emp: 'E006', amount: 15000, month: ymOf(TODAY()), reason: 'Rent deposit', status: 'Pending' }];
-SEEDS.promotions = [{ id: 'PR1', emp: 'E004', newTitle: 'Staff Software Engineer', newCtc: 2100000, date: addDays(TODAY(), 20), type: 'Performance', status: 'Pending' }];
+SEEDS.loans = [];
+SEEDS.advances = [];
+SEEDS.promotions = [];
 SEEDS.resignations = []; SEEDS.terminations = [];
-SEEDS.warnings = [{ id: 'W1', title: 'Repeated late arrivals', emp: 'E015', date: addDays(TODAY(), -12), description: 'Verbal warning after 5 late check-ins in a month.' }];
-SEEDS.complaints = [{ id: 'CP1', title: 'Shared desk noise', by: 'E008', against: 'E005', date: addDays(TODAY(), -6), status: 'Investigating' }];
-SEEDS.awards = [{ id: 'AW1', emp: 'E004', type: 'Star Performer of the Month', description: 'Outstanding site coverage and punctuality', date: addDays(TODAY(), -9), expire: '', status: 'Active' }, { id: 'AW2', emp: 'E014', type: 'Customer Champion', description: 'Highest customer satisfaction at handover', date: addDays(TODAY(), -40), expire: '', status: 'Active' }];
-SEEDS.assets = [{ id: 'AS1', name: 'Dell Latitude 5440', category: 'Laptop', code: 'AST-001', serial: 'C02XK1', assignee: 'E004', status: 'Assigned' }, { id: 'AS2', name: 'Samsung Galaxy Tab S9 (site)', category: 'Site tablet', code: 'AST-002', serial: 'CN0H7', assignee: 'E005', status: 'Assigned' }, { id: 'AS3', name: 'iPhone 13', category: 'Mobile', code: 'AST-003', serial: 'F2LX9', assignee: '', status: 'Available' }, { id: 'AS4', name: 'Royal Enfield bike (field)', category: 'Vehicle', code: 'AST-004', serial: 'PF3A1', assignee: 'E008', status: 'Repair' }];
-SEEDS.assethist = [{ id: 'AH1', asset: 'Dell Latitude 5440', to: 'Sneha Kapoor', date: addDays(TODAY(), -200) }];
-SEEDS.meetings = [{ id: 'M1', title: 'Weekly sales review — Skyline Heights', date: addDays(TODAY(), 1), time: '11:00', where: 'Site office', host: 'E003' }, { id: 'M2', title: 'Tower B launch planning', date: addDays(TODAY(), 3), time: '15:30', where: 'Boardroom', host: 'E001' }];
-SEEDS.appointments = [{ id: 'AP1', by: 'E004', with: 'E003', date: addDays(TODAY(), 2), time: '16:00', purpose: 'Career discussion', status: 'Requested' }];
-SEEDS.docreq = [{ id: 'DR1', emp: 'E004', type: 'Salary certificate', note: 'For home loan', status: 'Pending', date: addDays(TODAY(), -2) }];
+SEEDS.warnings = [];
+SEEDS.complaints = [];
+SEEDS.awards = [];
+SEEDS.assets = [];
+SEEDS.assethist = [];
+SEEDS.meetings = [];
+SEEDS.appointments = [];
+SEEDS.docreq = [];
 SEEDS.evalq = [['Delivers work on time with high quality', 10], ['Collaborates and communicates clearly', 10], ['Takes ownership and shows initiative', 10], ['Keeps learning and shares knowledge', 10], ['Lives company values', 10]].map((q, i) => ({ id: 'Q' + i, question: q[0], mark: q[1], status: 'Active' }));
 SEEDS.evals = []; SEEDS.sticky = [];
 

@@ -8,10 +8,7 @@ async function ifscLookup(code) { try { const r = await fetch('/api/ifsc/' + enc
 const bankLine = e => e.bankInfo?.ifsc ? `${e.bankInfo.bank || bankFromIfsc(e.bankInfo.ifsc) || 'Bank'} · ${maskAcc(e.bankInfo.acc)} · IFSC ${e.bankInfo.ifsc}` : 'Not added';
 
 /* ---------- demo bank details (so the console has realistic data) ---------- */
-function ensureBank() {
-  const R = rng(321), B = Object.keys(BANKS).slice(0, 9); DB.employees.forEach((e, i) => { if (e.bankInfo !== undefined || e.status === 'Exited') return; if (e.id === 'E023') { e.bankInfo = null; return; } const code = B[(i * 3 + 1) % B.length], digits = n => Array.from({ length: n }, () => Math.floor(R() * 10)).join(''); e.bankInfo = { holder: e.name, bank: BANKS[code], ifsc: code + '0' + digits(6), acc: digits(11 + (i % 4)), branch: 'Bengaluru', updatedAt: Date.now() - 200 * 864e5, by: 'E002' }; e.bank = `${e.bankInfo.bank} · ${e.bankInfo.acc.slice(-4)}`; });
-  const x = emp('E007'); if (x?.bankInfo && !x.bankInfo.changedAt) { x.bankInfo.changedAt = Date.now() - 4 * 864e5; x.bankInfo.by = 'E007'; }
-}
+function ensureBank() { DB.employees.forEach(e => { if (e.bankInfo === undefined) e.bankInfo = null; }); }
 const _bootP = boot; boot = function () { load(); ensureBank(); DB.payAdj ??= {}; save(); _bootP(); };
 
 /* ---------- bank details editor (account + IFSC with live validation) ---------- */

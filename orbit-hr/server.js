@@ -19,7 +19,7 @@ setInterval(() => { if (dirty) { dirty = false; fs.writeFile(stateFile, JSON.str
 let webpush = null; try { webpush = require('web-push'); } catch { console.log('web-push not installed: background push disabled'); }
 let VAPID = null;
 if (webpush) { const vf = path.join(DATA, 'vapid.json'); try { VAPID = JSON.parse(fs.readFileSync(vf, 'utf8')); } catch { VAPID = webpush.generateVAPIDKeys(); fs.writeFileSync(vf, JSON.stringify(VAPID)); } }
-const applyVapid = () => { if (webpush && VAPID) { try { webpush.setVapidDetails(CFGM.pushSubject(), VAPID.publicKey, VAPID.privateKey); } catch (e) { console.log('Bad push contact, using default:', e.message); webpush.setVapidDetails('mailto:hr@orbit.demo', VAPID.publicKey, VAPID.privateKey); } } };
+const applyVapid = () => { if (webpush && VAPID) { try { webpush.setVapidDetails(CFGM.pushSubject(), VAPID.publicKey, VAPID.privateKey); } catch (e) { console.log('Bad push contact, using default:', e.message); webpush.setVapidDetails('mailto:admin@example.com', VAPID.publicKey, VAPID.privateKey); } } };
 ST.subs ||= {}; ST.pres ||= {}; ST.sent ||= {}; ST.plog ||= [];
 /* admin-editable branding, company profile and integrations (see server_cfg.js) */
 const CFGM = require('./server_cfg.js')({ DATA, json: (res, code, obj) => json(res, code, obj), getPush: () => ({ enabled: !!webpush }), onPush: () => applyVapid(),
@@ -81,9 +81,9 @@ async function verify(b, ip) {
 }
 
 /* Demo field team (clearly flagged sim:true) */
-const DEMO = [['E013', 'Rahul Desai', 12.9716, 77.5946], ['E014', 'Pooja Menon', 12.9352, 77.6245], ['E015', 'Aditya Kulkarni', 13.0358, 77.597]];
+const DEMO = [];
 function tickDemo() {
-  if (!ST.demo) return;
+  return; /* live: no simulated people */
   DEMO.forEach(([id, name, la, ln], i) => {
     const t = ST.track[id] ||= { name, sim: true, trail: [] }; const p = t.trail.at(-1) || { lat: la, lng: ln };
     const np = { lat: p.lat + (Math.random() - .45) * .0018, lng: p.lng + (Math.random() - .45) * .0018, acc: 12, ts: Date.now() };
@@ -153,7 +153,7 @@ http.createServer(async (req, res) => {
     if (p === '/api/track' && req.method === 'GET') return json(res, 200, ST.track);
     if (p === '/api/track' && req.method === 'POST') { const b = await body(req); if (!b.emp || !Number.isFinite(b.lat) || !Number.isFinite(b.lng)) return json(res, 400, { error: 'bad fix' }); const t = ST.track[b.emp] ||= { name: str(b.name, 80), trail: [] }; const pt = { lat: b.lat, lng: b.lng, acc: +b.acc || 0, ts: Date.now() }; t.name = str(b.name, 80) || t.name; t.sim = false; t.last = pt; t.trail.push(pt); if (t.trail.length > 300) t.trail.shift(); persist(); push('track', { emp: b.emp, ...t }); return json(res, 200, { ok: true, ts: pt.ts }); }
     if (p === '/api/track' && req.method === 'DELETE') { const id = u.searchParams.get('emp'); if (id === 'ALL-SIM') { for (const k of Object.keys(ST.track)) if (ST.track[k].sim) delete ST.track[k]; ST.demo = false; } else delete ST.track[id]; persist(); push('track-clear', { emp: id }); return json(res, 200, { ok: true }); }
-    if (p === '/api/track/demo' && req.method === 'POST') { const b = await body(req); ST.demo = !!b.on; persist(); if (ST.demo) tickDemo(); return json(res, 200, { demo: ST.demo }); }
+    if (false && p === '/api/track/demo') { const b = await body(req); ST.demo = !!b.on; persist(); if (ST.demo) tickDemo(); return json(res, 200, { demo: ST.demo }); }
     if (p.startsWith('/api/')) return json(res, 404, { error: 'not found' });
     // static
     let f = path.normalize(path.join(ROOT, p === '/' ? 'index.html' : decodeURIComponent(p)));

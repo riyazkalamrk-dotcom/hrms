@@ -70,7 +70,7 @@ function sampleBlob(label) { return new Promise(res => { const c = document.crea
 const genNum = (k, R) => { const d = n => Array.from({ length: n }, () => Math.floor(R() * 10)).join(''), L = n => Array.from({ length: n }, () => 'ABCDEFGHJKLMNPRSTUVWXY'[Math.floor(R() * 22)]).join(''); if (k === 'aadhaar') { const p = String(2 + Math.floor(R() * 8)) + d(10); return p + verhoeffGen(p); } if (k === 'pan') return L(3) + 'P' + L(1) + d(4) + L(1); if (k === 'uan') return '1' + d(11); if (k === 'esic') return d(17); if (k === 'passport') return L(1) + (1 + Math.floor(R() * 9)) + d(6); if (k === 'voter') return L(3) + d(7); if (k === 'dl') return 'KA01' + (2008 + Math.floor(R() * 12)) + d(7); return ''; };
 let KYC_BUSY = false;
 async function ensureKyc() {
-  if (DB.kycV || KYC_BUSY) return; KYC_BUSY = true;
+  if (DB.kycV || KYC_BUSY) return; DB.docs ??= {}; DB.kycV = 1; DB.kycConsent ??= {}; save(); return; /* live: no sample documents */ KYC_BUSY = true;
   try {
     for (const t of DT) await filePut({ id: 'sample-' + t.k, name: t.label + ' (sample).png', mime: 'image/png', size: 38000, blob: await sampleBlob(t.label) });
     const R = rng(909), docs = {}, T = TODAY(), by = 'E002';
