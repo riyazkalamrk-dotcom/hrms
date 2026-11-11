@@ -175,8 +175,19 @@ html.m-ui .ticker{display:none!important}
 html.m-ui #alertbar .abar{padding:8px 14px;gap:10px;font-size:13px}
 html.m-ui #alertbar .abar .t{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 html.m-ui #alertbar .abar .t .muted{display:none}
-html.m-ui #alertbar .abar .btn{flex:none;white-space:nowrap;min-height:36px;padding:0 12px;font-size:0}
-html.m-ui #alertbar .abar .btn::after{content:"Open";font-size:13px}
+html.m-ui #alertbar{position:static!important}
+html.m-ui #alertbar .abar .btn{flex:none;white-space:nowrap;min-height:36px;padding:0 12px;font-size:12.500px}
+html.m-ui #alertbar .abar a.btn[href="#/alerts"]{font-size:0}
+html.m-ui #alertbar .abar a.btn[href="#/alerts"]::after{content:"Open";font-size:13px}
+html.m-ui #alertbar .abar:not(.hr){flex-wrap:wrap;row-gap:8px}
+html.m-ui #alertbar .abar:not(.hr) .t{flex:1 1 200px;min-width:0;white-space:normal;overflow:visible}
+html.m-ui #alertbar .abar:not(.hr) .t .muted{display:inline}
+html.m-ui .tablewrap table:has(td.empty){min-width:0}
+html.m-ui .tablewrap td.empty{white-space:normal;text-align:center}
+html.m-ui .rcal .rchip{padding:4px 1px;max-width:100%}
+html.m-ui .rcal .rchip small{display:block;font-size:8.500px;line-height:1.2;letter-spacing:-.03em;word-break:normal;overflow-wrap:normal}
+html.m-ui .cal .d small{font-size:9px;line-height:1.15;letter-spacing:-.02em;word-break:normal;overflow-wrap:normal}
+html.m-ui .view .tabs{overflow-x:auto;scrollbar-width:none;-webkit-overflow-scrolling:touch}html.m-ui .view .tabs::-webkit-scrollbar{display:none}html.m-ui .view .tabs button{flex:none;white-space:nowrap}
 html.m-ui .modal-bg{place-items:end center;padding:0}
 html.m-ui .modal-bg>.modal{max-width:none;width:100%;border-radius:26px 26px 0 0;max-height:calc(100dvh - 40px);padding-bottom:env(safe-area-inset-bottom,0px);animation:mhsheet .38s cubic-bezier(.2,.9,.25,1) both}
 @keyframes mhsheet{from{transform:translateY(100%)}}
@@ -190,6 +201,10 @@ html.m-ui .view .card>header{flex-wrap:wrap;gap:8px}
 html.m-ui .view .card>header h3{min-width:0;flex:1 1 160px}
 html.m-ui .polgrid{overflow-x:auto;grid-template-columns:repeat(4,minmax(112px,1fr))!important}
 html.m-ui .steps{flex-wrap:wrap}html.m-ui .steps>*{flex:1 1 140px}
+html.m-ui .modal .grid{grid-template-columns:minmax(0,1fr)!important}
+html.m-ui .modal .mbody>*{max-width:100%}html.m-ui input[type=file]{width:100%;max-width:100%}
+html.m-ui .view .grid.g-main,html.m-ui .view .grid.g2:not(:has(>.kpi)){grid-template-columns:minmax(0,1fr)!important}
+html.m-ui .view .grid>*{min-width:0}
 html.m-ui .view .grid:has(>.kpi){grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px}
 html.m-ui .view .card.kpi{min-width:0;padding:14px}html.m-ui .view .card.kpi .l,html.m-ui .view .card.kpi .d{overflow-wrap:anywhere}
 html.m-ui .view .card{border-radius:20px}
