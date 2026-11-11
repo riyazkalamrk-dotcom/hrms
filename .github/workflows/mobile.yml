@@ -1,0 +1,141 @@
+# Builds the Orbit HRMS phone apps on GitHub's machines — no Mac or Android tools needed on your PC.
+#
+# Runs on every push to main that touches the app, or by hand: Actions tab → mobile → Run workflow.
+#
+# ALWAYS RUNS (no accounts or secrets needed)
+#   android-debug   test APK you can install directly            → artifact "android-debug"
+#   ios-compile     proves the iPhone app compiles (simulator)   → artifact "ios-simulator"
+#
+# OPTIONAL — switch on with repository VARIABLES (Settings → Secrets and variables → Actions → Variables)
+#   ORBIT_SERVER            https://hr.yourcompany.com   (the address the apps talk to; must be https for iPhone)
+#   ORBIT_APP_ID            com.yourcompany.hr
+#   ORBIT_APP_NAME          Your Company HR
+#   ORBIT_ANDROID_SIGNING   yes   → also builds the signed Play Store AAB + APK
+#   ORBIT_IOS_SIGNING       yes   → also builds a signed iPhone app and uploads it to TestFlight
+#   ORBIT_IOS_PROFILE_NAME  name of the App Store provisioning profile
+#
+# SECRETS needed only for the optional jobs (same Settings page → Secrets)
+#   Android: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, GOOGLE_SERVICES_JSON
+#   iPhone : IOS_CERT_P12_B64, IOS_CERT_PASSWORD, IOS_PROFILE_B64, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_KEY_P8
+#            (these come from a paid Apple Developer account)
+name: mobile
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['orbit-hr/**.js', 'orbit-hr/**.css', 'orbit-hr/**.html', 'orbit-hr/mobile/**', '.github/workflows/mobile.yml']
+env:
+  WEB: ${{ github.workspace }}/orbit-hr
+  SERVER: ${{ vars.ORBIT_SERVER || 'http://192.168.1.22:5173' }}
+  APP_ID: ${{ vars.ORBIT_APP_ID || 'in.orbit.hrms' }}
+  APP_NAME: ${{ vars.ORBIT_APP_NAME || 'Orbit HRMS' }}
+  ORBIT_VERSION: 1.0.${{ github.run_number }}
+  ORBIT_VERSION_CODE: ${{ github.run_number }}
+jobs:
+  android-debug:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: orbit-hr/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci || npm install
+      - run: npm run setup -- --web "$WEB" --server "$SERVER" --id "$APP_ID" --name "$APP_NAME" --only android --iconserver "$SERVER"
+      - run: npm run android:apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android-debug, path: orbit-hr/mobile/dist/*.apk }
+
+  ios-compile:
+    runs-on: macos-latest
+    defaults: { run: { working-directory: orbit-hr/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+      - run: npm run setup -- --web "$WEB" --server "$SERVER" --id "$APP_ID" --name "$APP_NAME" --only ios --iconserver "$SERVER"
+      - name: Compile for the iPhone simulator (unsigned)
+        working-directory: orbit-hr/mobile/ios/App
+        run: |
+          xcodebuild -project App.xcodeproj -scheme App -configuration Debug -sdk iphonesimulator \
+            -destination 'generic/platform=iOS Simulator' -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO build
+          cd build/Build/Products/Debug-iphonesimulator && zip -qr "$GITHUB_WORKSPACE/OrbitHRMS-simulator.zip" App.app
+      - uses: actions/upload-artifact@v4
+        with: { name: ios-simulator, path: OrbitHRMS-simulator.zip }
+
+  android-release:
+    if: ${{ vars.ORBIT_ANDROID_SIGNING == 'yes' }}
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: orbit-hr/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 21 }
+      - uses: android-actions/setup-android@v3
+      - run: npm ci || npm install
+      - name: Firebase + signing files
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          ANDROID_KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+        run: |
+          mkdir -p firebase
+          if [ -n "$GOOGLE_SERVICES_JSON" ]; then printf '%s' "$GOOGLE_SERVICES_JSON" > firebase/google-services.json; fi
+          printf '%s' "$ANDROID_KEYSTORE_B64" | base64 -d > release.jks
+      - run: npm run setup -- --web "$WEB" --server "$SERVER" --id "$APP_ID" --name "$APP_NAME" --only android --iconserver "$SERVER"
+      - name: Keystore properties
+        env:
+          KS_PASS: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: printf 'storeFile=../release.jks\nstorePassword=%s\nkeyAlias=%s\nkeyPassword=%s\n' "$KS_PASS" "$KEY_ALIAS" "$KEY_PASS" > android/keystore.properties
+      - run: npm run android:aab
+      - run: npm run android:apk
+      - uses: actions/upload-artifact@v4
+        with: { name: android-release, path: orbit-hr/mobile/dist/* }
+
+  ios-testflight:
+    if: ${{ vars.ORBIT_IOS_SIGNING == 'yes' }}
+    runs-on: macos-latest
+    defaults: { run: { working-directory: orbit-hr/mobile } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci || npm install
+      - run: npm run setup -- --web "$WEB" --server "$SERVER" --id "$APP_ID" --name "$APP_NAME" --only ios --iconserver "$SERVER"
+      - uses: apple-actions/import-codesign-certs@v3
+        with: { p12-file-base64: '${{ secrets.IOS_CERT_P12_B64 }}', p12-password: '${{ secrets.IOS_CERT_PASSWORD }}' }
+      - name: Provisioning profile
+        env:
+          IOS_PROFILE_B64: ${{ secrets.IOS_PROFILE_B64 }}
+        run: |
+          DIR="$HOME/Library/MobileDevice/Provisioning Profiles"; mkdir -p "$DIR"
+          printf '%s' "$IOS_PROFILE_B64" | base64 -d > "$DIR/orbit.mobileprovision"
+          UUID=$(grep -a -A1 UUID "$DIR/orbit.mobileprovision" | grep -io '[0-9a-f-]\{36\}' | head -1)
+          mv "$DIR/orbit.mobileprovision" "$DIR/$UUID.mobileprovision"
+      - name: Archive + export
+        working-directory: orbit-hr/mobile/ios/App
+        env:
+          PROFILE: ${{ vars.ORBIT_IOS_PROFILE_NAME }}
+        run: |
+          cat > ExportOptions.plist <<EOF
+          <?xml version="1.0" encoding="UTF-8"?><!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd"><plist version="1.0"><dict><key>method</key><string>app-store-connect</string><key>signingStyle</key><string>manual</string><key>provisioningProfiles</key><dict><key>$APP_ID</key><string>$PROFILE</string></dict></dict></plist>
+          EOF
+          xcodebuild -project App.xcodeproj -scheme App -configuration Release -archivePath build/App.xcarchive archive \
+            MARKETING_VERSION="$ORBIT_VERSION" CURRENT_PROJECT_VERSION="$ORBIT_VERSION_CODE" \
+            CODE_SIGN_STYLE=Manual PROVISIONING_PROFILE_SPECIFIER="$PROFILE"
+          xcodebuild -exportArchive -archivePath build/App.xcarchive -exportOptionsPlist ExportOptions.plist -exportPath build/ipa
+      - uses: apple-actions/upload-testflight-build@v1
+        with:
+          app-path: orbit-hr/mobile/ios/App/build/ipa/App.ipa
+          issuer-id: ${{ secrets.APPSTORE_ISSUER_ID }}
+          api-key-id: ${{ secrets.APPSTORE_KEY_ID }}
+          api-private-key: ${{ secrets.APPSTORE_KEY_P8 }}
+      - uses: actions/upload-artifact@v4
+        with: { name: ios, path: orbit-hr/mobile/ios/App/build/ipa/*.ipa }

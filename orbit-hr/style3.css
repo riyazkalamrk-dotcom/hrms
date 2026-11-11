@@ -1,0 +1,71 @@
+/* ===== layout hardening: nothing is cut off, wide tables scroll inside their card ===== */
+.grid>*,.row>*,.view>*{min-width:0}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}.g-main{grid-template-columns:minmax(0,2fr) minmax(0,1fr)}
+@media(max-width:1100px){.g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))}.g-main{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:640px){.g2,.g3,.g4{grid-template-columns:minmax(0,1fr)}}
+.main,.view{min-width:0;max-width:100%}
+.card{min-width:0}
+.card.pad0{overflow-x:auto;overflow-y:hidden;-webkit-overflow-scrolling:touch}
+.card.pad0>table,.tablewrap>table{width:100%}
+th{white-space:nowrap}
+td{overflow-wrap:anywhere}
+td .badge,td .btn,td button{white-space:nowrap}
+.card h3,.card b,.card .muted,.page-head h1,.page-head p{overflow-wrap:anywhere}
+.kpi .l,.kpi .v{overflow-wrap:anywhere}
+.badge{max-width:100%}
+.toolbar{flex-wrap:wrap}
+.toolbar>.select,.toolbar>.input{min-width:0;max-width:100%}
+.modal{max-width:calc(100vw - 24px)}
+.modal .mbody{overflow-wrap:anywhere}
+
+/* ===== charts v2 ===== */
+.chsvg{display:block;overflow:visible;margin:0 auto}
+.chsvg text{font-family:inherit}
+.chg .cbar{transition:filter .18s,opacity .18s}.chg:hover .cbar{filter:brightness(1.08) saturate(1.1)}
+.chdot{transition:r .15s}.chdot:hover{r:6}
+.chdonut{display:flex;align-items:center;gap:22px;flex-wrap:wrap}
+.chleg{display:flex;flex-direction:column;gap:7px;flex:1;min-width:150px}
+.chli{display:grid;grid-template-columns:10px minmax(0,1fr) auto 42px;gap:8px;align-items:center;font-size:13px}
+.chli i{width:10px;height:10px;border-radius:3px}
+.chli span{overflow-wrap:anywhere;line-height:1.25}
+.chli b{font-variant-numeric:tabular-nums}
+.chli em{font-style:normal;color:var(--muted);font-size:12px;text-align:right;font-variant-numeric:tabular-nums}
+.chempty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:120px;color:var(--muted);font-size:13px;border:1px dashed var(--line);border-radius:14px}
+
+/* week strip: wraps instead of pushing the page wider */
+.wkstrip{grid-template-columns:repeat(auto-fit,minmax(72px,1fr))!important}
+.wkc{min-width:0}.wkc span,.wkc small,.wkc b{max-width:100%;overflow-wrap:anywhere;line-height:1.2}
+.wkc span:not(.rchip){font-size:10px}
+
+/* phones: wrap instead of clip */
+.btn{flex-shrink:0;white-space:nowrap}
+@media(max-width:700px){
+ .row{flex-wrap:wrap}
+ .row>.right{margin-left:auto}
+ .top{flex-wrap:wrap;gap:8px}
+ .top .select{max-width:44vw}
+ .top .right{margin-left:auto}
+ .page-head{flex-wrap:wrap;gap:10px}.page-head .right{margin-left:0}
+ .tabs{overflow-x:auto;flex-wrap:nowrap;max-width:100%}
+ .tabs button{flex:none}
+}
+
+/* calendars never push the page wider */
+.cal{grid-template-columns:repeat(7,minmax(0,1fr))!important}
+.cal .d{min-width:0}
+.cal .d small{max-width:100%;overflow-wrap:anywhere;line-height:1.15}
+@media(max-width:560px){.cal{gap:3px}.cal .d{padding:3px 3px;font-size:11px;aspect-ratio:auto;min-height:48px}.cal .d small{font-size:8.5px}.cal .h{font-size:10px}}
+
+.wkgrid{grid-template-columns:repeat(7,minmax(0,1fr))!important}.wk{min-width:0;overflow-wrap:anywhere}
+
+/* horizontal bars (long category names) */
+.chh{display:flex;flex-direction:column;gap:9px}
+.chr{display:grid;grid-template-columns:minmax(84px,38%) minmax(0,1fr) auto;gap:10px;align-items:center;font-size:12.5px}
+.chl{line-height:1.2;overflow-wrap:anywhere;color:var(--ink)}
+.cht{height:12px;border-radius:99px;background:var(--line);overflow:hidden}
+.chf{display:block;height:100%;border-radius:99px;animation:grow-x .9s var(--ease) both;transition:filter .18s}
+.chr:hover .chf{filter:brightness(1.1) saturate(1.1)}
+.chv{font-variant-numeric:tabular-nums;min-width:2.2em;text-align:right}
+
+/* daily briefing: rows wrap instead of forcing a horizontal scrollbar */
+.brief{overflow-x:hidden}.brief>*{min-width:0}.brief .row{flex-wrap:wrap}.brief .row>div,.brief .row>span:not(.badge){min-width:0;overflow-wrap:anywhere}

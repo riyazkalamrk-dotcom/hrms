@@ -1,0 +1,23 @@
+# dependencies (reinstall with: npm install)
+node_modules/
+
+# server secrets and runtime state — back this folder up separately, never commit it
+orbit-hr/data/
+
+# mobile build output and signing files
+orbit-hr/mobile/www/
+orbit-hr/mobile/dist/
+orbit-hr/mobile/android/.gradle/
+orbit-hr/mobile/android/build/
+orbit-hr/mobile/android/app/build/
+orbit-hr/mobile/android/local.properties
+orbit-hr/mobile/android/keystore.properties
+orbit-hr/mobile/android/app/google-services.json
+orbit-hr/mobile/firebase/google-services.json
+*.jks
+
+# local tool settings and iOS build output
+.claude/
+orbit-hr/.claude/
+orbit-hr/mobile/ios/App/build/
+orbit-hr/mobile/release.jks

@@ -1,0 +1,178 @@
+'use strict';
+/* Orbit HRMS — admin-editable configuration: branding, company profile and third-party integrations.
+   Stored in data/config.json. API secrets never leave the server (the admin UI only ever sees "••••1234").
+   Writes need the admin key (data/admin.key or ADMIN_KEY env) unless the request comes from this machine (set ADMIN_STRICT=1 to always require it). */
+const fs = require('fs'), path = require('path'), crypto = require('crypto');
+
+const FONTS = ['Plus Jakarta Sans', 'Inter', 'Poppins', 'DM Sans', 'Nunito', 'Manrope', 'Outfit', 'System'];
+const BRAND_DEF = { name: 'Orbit Realty', product: 'HRMS', short: 'Orbit HR', tagline: 'Every site, every shift, every person — in one place.', loginText: 'HR built for builders and developers: geo-fenced site attendance, duty reminders, leave, payroll and people records that just work.', features: ['Geo-fenced site check-in', 'Face + GPS anti-spoofing', 'Duty reminders & push alerts', 'Leave & expense approvals', 'Goals, reviews & kudos', 'Payroll, loans & payslips', 'Recruitment pipeline', 'Live field tracking'], logo: '', loginBg: '', primary: '#17406f', accent2: '#c9a24b', sidebar: '#0a1a2f', radius: 16, font: 'Plus Jakarta Sans', theme: 'light', skyline: true, support: '', footer: 'Demo workspace · data stays in your browser' };
+const COMPANY_DEF = { legal: '', address: '', city: '', state: '', pin: '', gstin: '', cin: '', pan: '', tan: '', pf: '', esi: '', pt: '', email: '', phone: '', website: '', signatory: '', signatoryTitle: '', rera: '' };
+
+/* ---------- catalogue of integrations (single source of truth, also drives the admin UI) ---------- */
+const sel = (k, label, opts, def, hint) => ({ k, label, type: 'select', opts, def, hint });
+const T = (k, label, def = '', hint = '', extra = {}) => ({ k, label, type: 'text', def, hint, ...extra });
+const S = (k, label, hint = '') => ({ k, label, type: 'password', secret: true, hint });
+const N = (k, label, def, hint = '') => ({ k, label, type: 'number', def, hint });
+const CATALOG = [
+  { id: 'maps', group: 'core', name: 'Map tiles', icon: '🗺️', needs: 'Live tracking, Locations map, geo-fence preview', desc: 'Where the map pictures come from. OpenStreetMap works out of the box (fair-use). For heavy traffic use MapTiler, Mapbox, Stadia, etc.', fields: [T('url', 'Tile URL', 'https://tile.openstreetmap.org/{z}/{x}/{y}.png', 'Use {z} {x} {y}. Add {key} to insert the key below.'), T('key', 'Provider key (optional)', '', 'Tile keys are visible in the browser — restrict them to your domain at the provider.'), T('attribution', 'Attribution text', '© OpenStreetMap contributors'), N('maxZoom', 'Max zoom', 19)] },
+  { id: 'geocode', group: 'core', name: 'Address search (geocoding)', icon: '📍', needs: 'Finding a site address when adding a Location', desc: 'Turns “Whitefield, Bengaluru” into coordinates. The server calls the provider so your key stays private.', fields: [sel('provider', 'Provider', ['nominatim', 'maptiler', 'google'], 'nominatim'), T('url', 'Nominatim URL', 'https://nominatim.openstreetmap.org/search', 'Only for Nominatim — self-host for heavy use.'), S('apiKey', 'API key (MapTiler / Google)'), T('country', 'Limit to country code', 'in', '2-letter code, e.g. in'), T('email', 'Contact email (Nominatim policy)', '', 'Nominatim asks to identify your app.')] },
+  { id: 'ifsc', group: 'core', name: 'IFSC bank lookup', icon: '🏦', needs: 'Employee bank details → auto bank/branch from IFSC', desc: 'Looks up bank & branch from an IFSC code. Razorpay’s public API is free and needs no key.', fields: [T('url', 'Base URL', 'https://ifsc.razorpay.com/', 'Must end with /'), N('timeout', 'Timeout (seconds)', 5)] },
+  { id: 'face', group: 'core', name: 'Face recognition models', icon: '🙂', needs: 'Face attendance & liveness (blink) check', desc: 'Where the browser downloads the face-api.js library and neural-network models. Self-host them for privacy or offline sites.', fields: [T('js', 'face-api.js URL', 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/dist/face-api.js'), T('models', 'Models folder URL', 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.12/model/', 'Must end with /'), N('threshold', 'Match strictness (lower = stricter)', 0.5, '0.35 strict · 0.5 balanced · 0.6 lenient')] },
+  { id: 'ipgeo', group: 'core', name: 'IP location (anti-spoofing)', icon: '🛰️', needs: 'Catches fake-GPS / VPN check-ins by comparing network location', desc: 'The server compares the phone’s GPS with where its internet connection appears to be.', fields: [sel('provider', 'Provider', ['ip-api', 'ipinfo', 'off'], 'ip-api'), S('token', 'ipinfo token (if used)'), N('mismatchKm', 'Flag when GPS and network differ by (km)', 400)] },
+  { id: 'push', group: 'core', name: 'Web push (reminders when the app is closed)', icon: '🔔', needs: 'Duty-start, late and check-out reminders on phones', desc: 'Uses your own VAPID keys, generated for you. Regenerating keys signs everyone out of push — they must re-enable it.', fields: [T('subject', 'Contact (mailto: or https:)', 'mailto:hr@example.com', 'Push services use this to reach you about abuse.'), N('ttl', 'Keep undelivered for (seconds)', 3600)], special: 'push' },
+  { id: 'email', group: 'messaging', name: 'Email (SMTP)', icon: '✉️', needs: 'Emailing alerts, payslips, approvals', desc: 'Any SMTP service: Gmail/Workspace app-password, Zoho, SendGrid, Amazon SES, Brevo…', fields: [T('host', 'SMTP host', '', 'e.g. smtp.gmail.com'), N('port', 'Port', 587, '587 (STARTTLS) · 465 (SSL)'), sel('secure', 'Encryption', ['starttls', 'ssl', 'none'], 'starttls'), T('user', 'Username'), S('pass', 'Password / app password'), T('fromName', 'From name', ''), T('fromEmail', 'From address', ''), T('replyTo', 'Reply-to (optional)')], notify: true },
+  { id: 'sms', group: 'messaging', name: 'SMS', icon: '💬', needs: 'Text alerts to employees', desc: 'MSG91 (India, DLT templates), Twilio, or any HTTP gateway.', fields: [sel('provider', 'Provider', ['msg91', 'twilio', 'custom'], 'msg91'), S('authKey', 'MSG91 auth key / Twilio Account SID'), S('authToken', 'Twilio auth token'), T('sender', 'Sender ID / From number'), T('templateId', 'MSG91 flow/template ID (DLT)'), T('countryCode', 'Default country code', '91'), T('url', 'Custom gateway URL (POST JSON)'), S('header', 'Custom Authorization header value')], notify: true },
+  { id: 'whatsapp', group: 'messaging', name: 'WhatsApp', icon: '🟢', needs: 'WhatsApp alerts to employees', desc: 'WhatsApp Cloud API (Meta) or Twilio WhatsApp. Business-initiated messages need an approved template.', fields: [sel('provider', 'Provider', ['meta', 'twilio'], 'meta'), T('phoneId', 'Meta phone number ID'), S('token', 'Meta access token / Twilio auth token'), S('sid', 'Twilio Account SID'), T('from', 'Twilio WhatsApp number (e.g. +1415…)'), T('template', 'Approved template name (1 text variable)'), T('lang', 'Template language', 'en'), T('countryCode', 'Default country code', '91'), sel('bot', 'HR chat bot (employees message this number)', ['off', 'on'], 'off', 'Webhook URL to give Meta: https://YOUR-DOMAIN/api/wa/webhook  (Twilio: /api/wa/twilio)'), S('verifyToken', 'Meta webhook verify token'), S('appSecret', 'Meta app secret (checks webhook signatures)'), sel('allowPayslip', 'Allow payslip summary on WhatsApp', ['no', 'yes'], 'no', 'Off by default for privacy')], notify: true },
+  { id: 'webhook', group: 'messaging', name: 'Webhook (Slack / Teams / custom)', icon: '🪝', needs: 'Posting HR alerts to a channel or your own system', desc: 'Slack and Teams “incoming webhook” URLs work directly; or send signed JSON to your own endpoint.', fields: [S('url', 'Webhook URL'), sel('format', 'Format', ['slack', 'teams', 'json'], 'slack'), S('signKey', 'Signing secret (adds X-Orbit-Signature)')], notify: true },
+  { id: 'fcm', group: 'smart', name: 'Mobile push (Firebase FCM)', icon: '📲', needs: 'Push notifications on the Android and iOS apps', desc: 'Create a Firebase project, add the Android and iOS apps, then paste the service-account JSON here (Firebase console → Project settings → Service accounts → Generate new private key). The server uses it to deliver duty reminders and alerts to phones, even when the app is closed.', fields: [T('projectId', 'Firebase project ID'), T('clientEmail', 'Service-account e-mail'), S('privateKey', 'Private key — or paste the whole JSON file here', 'Stored only on the server.')], special: 'fcm' },
+  { id: 'apns', group: 'smart', name: 'iPhone push (Apple APNs)', icon: '🍎', needs: 'Push notifications on the iPhone / iPad app', desc: 'In Apple Developer → Keys, create a key with “Apple Push Notifications service”, download the .p8 file, and paste its contents here. No Firebase is needed for iPhones.', fields: [T('keyId', 'Key ID', '', '10 characters, shown next to the key'), T('teamId', 'Team ID', '', 'Apple Developer → Membership'), T('bundleId', 'App bundle ID', '', 'e.g. com.yourcompany.hr — same as the app id you built with'), sel('environment', 'Environment', ['production', 'sandbox'], 'production', 'TestFlight and App Store use production; apps run from Xcode use sandbox. The server tries the other one automatically if needed.'), S('privateKey', 'Key file contents (.p8)')], special: 'apns' },
+  { id: 'ai', group: 'smart', name: 'AI assistant', icon: '✨', needs: 'The chat assistant answering from policies, leave and roster', desc: 'Connect Anthropic (Claude) or any OpenAI-compatible service. Each question sends only the asker’s own permitted data plus your published policies. Answers should be double-checked for anything important.', fields: [sel('provider', 'Provider', ['anthropic', 'openai'], 'anthropic'), T('model', 'Model', 'claude-haiku-5-5', 'e.g. claude-haiku-5-5, claude-sonnet-5-5, gpt-4o-mini'), S('apiKey', 'API key'), T('baseUrl', 'Base URL (optional)', '', 'Leave empty for the provider default; set for Azure/Ollama/OpenRouter etc.'), N('maxTokens', 'Max reply length (tokens)', 500), sel('shareData', 'Share personal data with the AI', ['yes', 'no'], 'yes', 'If “no”, the AI only sees company policies, holidays and public info.'), T('instructions', 'Extra instructions (optional)', '', 'e.g. Answer in Hinglish when the user writes Hinglish.')] }
+];
+const NOTIFY_CATS = [['attendance', 'Attendance (late, early, missed, away)'], ['approvals', 'Approvals & requests'], ['payroll', 'Payroll'], ['general', 'Everything else']];
+const byId = id => CATALOG.find(c => c.id === id);
+
+module.exports = function init(ctx) {
+  const { DATA, json, getPush, onPush, regenVapid, subsInfo } = ctx;
+  const file = path.join(DATA, 'config.json'); let C = { brand: {}, company: {}, int: {}, secrets: {}, status: {}, notify: {} };
+  try { C = Object.assign(C, JSON.parse(fs.readFileSync(file, 'utf8'))); } catch { }
+  const save = () => fs.writeFileSync(file, JSON.stringify(C));
+  const keyFile = path.join(DATA, 'admin.key'); let KEY = process.env.ADMIN_KEY || ''; if (!KEY) { try { KEY = fs.readFileSync(keyFile, 'utf8').trim(); } catch { KEY = crypto.randomBytes(12).toString('hex'); fs.writeFileSync(keyFile, KEY); } }
+  const isLocal = req => /^(::1|127\.0\.0\.1|::ffff:127\.0\.0\.1)$/.test(req.socket.remoteAddress || '') && !req.headers['x-forwarded-for'];
+  const adminOk = req => { if (!process.env.ADMIN_STRICT && isLocal(req)) return true; const h = String(req.headers['x-admin-key'] || ''), a = Buffer.from(h), b = Buffer.from(KEY); return a.length === b.length && crypto.timingSafeEqual(a, b); };
+  const readBody = (req, max = 1.7e6) => new Promise(r => { let s = '', over = false; req.on('data', c => { s += c; if (s.length > max) { over = true; req.destroy(); } }); req.on('end', () => { if (over) return r(null); try { r(JSON.parse(s || '{}')); } catch { r({}); } }); req.on('error', () => r(null)); });
+
+  const brand = () => ({ ...BRAND_DEF, ...C.brand }), company = () => ({ ...COMPANY_DEF, ...C.company });
+  const iv = (id, k) => { const f = byId(id)?.fields.find(x => x.k === k); const v = C.int[id]?.[k]; return v === undefined || v === '' ? f?.def : v; };
+  const sv = (id, k) => C.secrets[id]?.[k] || '';
+  const enabled = id => !!C.int[id]?.enabled;
+  const secState = id => Object.fromEntries((byId(id)?.fields || []).filter(f => f.secret).map(f => { const v = sv(id, f.k); return [f.k, { set: !!v, last4: v ? v.slice(-4) : '' }]; }));
+  const intValues = id => Object.fromEntries((byId(id)?.fields || []).filter(f => !f.secret).map(f => [f.k, iv(id, f.k) ?? ''])) ;
+
+  /* what the browser needs before anyone logs in (no secrets) */
+  const pub = () => ({ brand: brand(), company: (({ legal, address, city, state, pin, gstin, pan, email, phone, website }) => ({ legal, address, city, state, pin, gstin, pan, email, phone, website }))(company()), cfg: { tile: { url: iv('maps', 'url'), key: iv('maps', 'key') || '', attribution: iv('maps', 'attribution'), maxZoom: +iv('maps', 'maxZoom') || 19 }, face: { js: iv('face', 'js'), models: iv('face', 'models'), threshold: +iv('face', 'threshold') || 0.5 }, channels: Object.fromEntries(['email', 'sms', 'whatsapp', 'webhook'].map(i => [i, enabled(i) ? (C.notify[i] || []) : false])), bot: enabled('whatsapp') && iv('whatsapp', 'bot') === 'on', botPayslip: iv('whatsapp', 'allowPayslip') === 'yes', ai: enabled('ai'), aiShare: iv('ai', 'shareData') !== 'no' } });
+
+  /* ---------- helpers ---------- */
+  const UA = 'OrbitHRMS/1.0 (+admin-configured)';
+  async function fx(url, opt = {}, ms = 8000) { const ctl = new AbortController(), t = setTimeout(() => ctl.abort(), ms); try { return await fetch(url, { ...opt, signal: ctl.signal, headers: { 'User-Agent': UA, ...(opt.headers || {}) } }); } finally { clearTimeout(t); } }
+  const tileUrl = (z, x, y) => String(iv('maps', 'url')).replace('{s}', 'a').replace('{z}', z).replace('{x}', x).replace('{y}', y).replace('{key}', encodeURIComponent(iv('maps', 'key') || ''));
+  async function geocode(q) {
+    q = String(q || '').slice(0, 200); const p = iv('geocode', 'provider'), key = sv('geocode', 'apiKey'), cc = String(iv('geocode', 'country') || '').toLowerCase();
+    if (p === 'maptiler') { if (!key) throw new Error('MapTiler key missing'); const r = await fx(`https://api.maptiler.com/geocoding/${encodeURIComponent(q)}.json?limit=5&key=${encodeURIComponent(key)}${cc ? '&country=' + cc : ''}`), j = await r.json(); if (!r.ok) throw new Error(j.message || 'MapTiler error ' + r.status); return (j.features || []).map(f => ({ lat: f.center[1], lon: f.center[0], display_name: f.place_name })); }
+    if (p === 'google') { if (!key) throw new Error('Google key missing'); const r = await fx(`https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(q)}${cc ? '&components=country:' + cc : ''}&key=${encodeURIComponent(key)}`), j = await r.json(); if (j.status !== 'OK' && j.status !== 'ZERO_RESULTS') throw new Error(j.error_message || j.status); return (j.results || []).slice(0, 5).map(x => ({ lat: x.geometry.location.lat, lon: x.geometry.location.lng, display_name: x.formatted_address })); }
+    const base = iv('geocode', 'url'), em = iv('geocode', 'email'); const r = await fx(`${base}?format=json&limit=5&q=${encodeURIComponent(q)}${cc ? '&countrycodes=' + cc : ''}${em ? '&email=' + encodeURIComponent(em) : ''}`), j = await r.json(); if (!r.ok) throw new Error('Geocoder returned ' + r.status); return j.map(x => ({ lat: +x.lat, lon: +x.lon, display_name: x.display_name }));
+  }
+  const ifscCache = new Map();
+  async function ifsc(code) { code = String(code).toUpperCase(); if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(code)) throw new Error('bad ifsc'); if (ifscCache.has(code)) return ifscCache.get(code); const r = await fx(String(iv('ifsc', 'url')) + code, {}, (+iv('ifsc', 'timeout') || 5) * 1000); if (!r.ok) { if (r.status === 404) return null; throw new Error('IFSC service returned ' + r.status); } const j = await r.json(); ifscCache.set(code, j); return j; }
+  let mailer = null; try { mailer = require('nodemailer'); } catch { }
+  const transport = () => { if (!mailer) throw new Error('nodemailer is not installed on the server — run: npm i nodemailer'); const sec = iv('email', 'secure'); return mailer.createTransport({ host: iv('email', 'host'), port: +iv('email', 'port') || 587, secure: sec === 'ssl', requireTLS: sec === 'starttls', ignoreTLS: sec === 'none', auth: iv('email', 'user') ? { user: iv('email', 'user'), pass: sv('email', 'pass') } : undefined, connectionTimeout: 8000, greetingTimeout: 8000, socketTimeout: 12000 }); };
+  const phone = (n, cc) => { let d = String(n || '').replace(/[^\d+]/g, ''); if (!d) return ''; if (d.startsWith('+')) return d; d = d.replace(/^0+/, ''); return '+' + (d.length > 10 ? d : String(cc || '91') + d); };
+  const doEmail = async (to, subject, text) => { if (!to) throw new Error('no email address'); const fromEmail = iv('email', 'fromEmail') || iv('email', 'user'); return transport().sendMail({ from: `"${iv('email', 'fromName') || brand().name}" <${fromEmail}>`, to, replyTo: iv('email', 'replyTo') || undefined, subject, text }); };
+  async function doSms(to, text) {
+    const p = iv('sms', 'provider'), cc = iv('sms', 'countryCode'), num = phone(to, cc); if (!num) throw new Error('no phone number');
+    if (p === 'twilio') { const sid = sv('sms', 'authKey'), tok = sv('sms', 'authToken'); if (!sid || !tok) throw new Error('Twilio SID/token missing'); const r = await fx(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, { method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ To: num, From: iv('sms', 'sender') || '', Body: text }) }), j = await r.json(); if (!r.ok) throw new Error(j.message || 'Twilio ' + r.status); return j; }
+    if (p === 'msg91') { const k = sv('sms', 'authKey'); if (!k) throw new Error('MSG91 auth key missing'); if (!iv('sms', 'templateId')) throw new Error('MSG91 template ID missing (DLT)'); const r = await fx('https://control.msg91.com/api/v5/flow/', { method: 'POST', headers: { authkey: k, 'Content-Type': 'application/json' }, body: JSON.stringify({ template_id: iv('sms', 'templateId'), short_url: '0', recipients: [{ mobiles: num.replace('+', ''), VAR1: text.slice(0, 160), var1: text.slice(0, 160) }] }) }), j = await r.json().catch(() => ({})); if (!r.ok || j.type === 'error') throw new Error(j.message || 'MSG91 ' + r.status); return j; }
+    const url = iv('sms', 'url'); if (!url) throw new Error('Gateway URL missing'); const r = await fx(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...(sv('sms', 'header') ? { Authorization: sv('sms', 'header') } : {}) }, body: JSON.stringify({ to: num, message: text, sender: iv('sms', 'sender') }) }); if (!r.ok) throw new Error('Gateway returned ' + r.status); return { ok: true };
+  }
+  async function doWa(to, text) {
+    const p = iv('whatsapp', 'provider'), num = phone(to, iv('whatsapp', 'countryCode')); if (!num) throw new Error('no phone number');
+    if (p === 'twilio') { const sid = sv('whatsapp', 'sid'), tok = sv('whatsapp', 'token'); if (!sid || !tok) throw new Error('Twilio SID/token missing'); const r = await fx(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, { method: 'POST', headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64'), 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({ To: 'whatsapp:' + num, From: 'whatsapp:' + phone(iv('whatsapp', 'from'), '1'), Body: text }) }), j = await r.json(); if (!r.ok) throw new Error(j.message || 'Twilio ' + r.status); return j; }
+    const id = iv('whatsapp', 'phoneId'), tok = sv('whatsapp', 'token'); if (!id || !tok) throw new Error('Phone number ID / access token missing'); const tpl = iv('whatsapp', 'template');
+    const body = tpl ? { messaging_product: 'whatsapp', to: num.replace('+', ''), type: 'template', template: { name: tpl, language: { code: iv('whatsapp', 'lang') || 'en' }, components: [{ type: 'body', parameters: [{ type: 'text', text: text.slice(0, 600) }] }] } } : { messaging_product: 'whatsapp', to: num.replace('+', ''), type: 'text', text: { body: text } };
+    const r = await fx(`https://graph.facebook.com/v19.0/${encodeURIComponent(id)}/messages`, { method: 'POST', headers: { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' }, body: JSON.stringify(body) }), j = await r.json(); if (!r.ok) throw new Error(j.error?.message || 'WhatsApp ' + r.status); return j;
+  }
+  async function doHook(title, text, extra = {}) {
+    const url = sv('webhook', 'url'); if (!url) throw new Error('Webhook URL missing'); const f = iv('webhook', 'format'); const msg = `*${title}*\n${text}`;
+    const payload = f === 'teams' ? { '@type': 'MessageCard', '@context': 'https://schema.org/extensions', summary: title, title, text } : f === 'json' ? { event: extra.category || 'general', title, text, at: new Date().toISOString(), ...extra } : { text: msg };
+    const raw = JSON.stringify(payload), h = { 'Content-Type': 'application/json' }; if (sv('webhook', 'signKey')) h['X-Orbit-Signature'] = crypto.createHmac('sha256', sv('webhook', 'signKey')).update(raw).digest('hex');
+    const r = await fx(url, { method: 'POST', headers: h, body: raw }); if (!r.ok) throw new Error('Webhook returned ' + r.status); return { ok: true };
+  }
+  /* send a notification to every enabled channel that subscribes to its category */
+  let aiFn = null, fcmFn = null, apnsFn = null; const rate = []; let sentLog = [];
+  async function dispatch(n) {
+    const now = Date.now(); while (rate.length && now - rate[0] > 60000) rate.shift(); if (rate.length >= 40) return { skipped: 'rate limit' }; rate.push(now);
+    const cat = ['attendance', 'approvals', 'payroll', 'general'].includes(n.category) ? n.category : 'general', title = String(n.title || brand().name).slice(0, 120), text = String(n.body || '').slice(0, 600), res = {};
+    const want = id => enabled(id) && (C.notify[id] || []).includes(cat);
+    const jobs = [];
+    if (want('email') && n.to?.email) jobs.push(['email', doEmail(n.to.email, title, text)]);
+    if (want('sms') && n.to?.phone) jobs.push(['sms', doSms(n.to.phone, `${title}: ${text}`)]);
+    if (want('whatsapp') && n.to?.phone) jobs.push(['whatsapp', doWa(n.to.phone, `${title}\n${text}`)]);
+    if (want('webhook')) jobs.push(['webhook', doHook(title, text + (n.to?.name ? `\n→ ${n.to.name}` : ''), { category: cat })]);
+    await Promise.all(jobs.map(async ([id, p]) => { try { await p; res[id] = 'sent'; } catch (e) { res[id] = 'failed: ' + e.message; } }));
+    sentLog.unshift({ at: Date.now(), cat, title, res }); sentLog.length = Math.min(sentLog.length, 40); return res;
+  }
+
+  /* ---------- tests ---------- */
+  const TESTS = {
+    async maps() { const t0 = Date.now(), u = tileUrl(3, 5, 3), r = await fx(u); const ct = r.headers.get('content-type') || ''; if (!r.ok) throw new Error('Tile server returned ' + r.status); if (!/image/.test(ct)) throw new Error('Not an image (' + ct + ')'); return `Tile loaded in ${Date.now() - t0} ms`; },
+    async geocode() { const t0 = Date.now(), r = await geocode('Bengaluru'); if (!r.length) throw new Error('No result for "Bengaluru"'); return `Found “${r[0].display_name.slice(0, 50)}…” in ${Date.now() - t0} ms`; },
+    async ifsc() { const t0 = Date.now(), r = await ifsc('SBIN0000300'); if (!r) throw new Error('Test code not found'); return `${r.BANK} — ${r.BRANCH} (${Date.now() - t0} ms)`; },
+    async face() { const t0 = Date.now(), m = String(iv('face', 'models')); const r = await fx(m + 'tiny_face_detector_model-weights_manifest.json'); if (!r.ok) throw new Error('Models folder returned ' + r.status); const r2 = await fx(iv('face', 'js'), { method: 'HEAD' }); if (!r2.ok) throw new Error('face-api.js returned ' + r2.status); return `Library and models reachable (${Date.now() - t0} ms)`; },
+    async ipgeo() { const g = await ipLookup('8.8.8.8'); if (!g) throw new Error(iv('ipgeo', 'provider') === 'off' ? 'Disabled' : 'No answer from provider'); return `8.8.8.8 → ${g.city || 'located'} (${g.lat.toFixed(2)}, ${g.lng.toFixed(2)})`; },
+    async push() { const w = getPush(); if (!w.enabled) throw new Error('web-push package missing on the server'); const s = subsInfo(); return `VAPID ready · ${s.devices} device(s) subscribed across ${s.people} people`; },
+    async email(o) { if (!iv('email', 'host')) throw new Error('SMTP host is empty'); const tr = transport(); await tr.verify(); if (o.to) { await doEmail(o.to, `${brand().name} test email`, 'Your SMTP settings work. 🎉'); return 'Connected and test email sent to ' + o.to; } return 'Connected and logged in to the SMTP server'; },
+    async sms(o) { if (!o.to) { const p = iv('sms', 'provider'); if (p === 'twilio') { const sid = sv('sms', 'authKey'), tok = sv('sms', 'authToken'); if (!sid || !tok) throw new Error('Twilio SID/token missing'); const r = await fx(`https://api.twilio.com/2010-04-01/Accounts/${sid}.json`, { headers: { Authorization: 'Basic ' + Buffer.from(sid + ':' + tok).toString('base64') } }); if (!r.ok) throw new Error('Twilio rejected the credentials (' + r.status + ')'); return 'Twilio credentials are valid'; } throw new Error('Enter a phone number to send a test SMS'); } await doSms(o.to, `${brand().name}: test message`); return 'Test SMS accepted by the provider for ' + o.to; },
+    async whatsapp(o) { if (!o.to) { if (iv('whatsapp', 'provider') === 'meta') { const id = iv('whatsapp', 'phoneId'), tok = sv('whatsapp', 'token'); if (!id || !tok) throw new Error('Phone number ID / token missing'); const r = await fx(`https://graph.facebook.com/v19.0/${encodeURIComponent(id)}?fields=display_phone_number,verified_name`, { headers: { Authorization: 'Bearer ' + tok } }), j = await r.json(); if (!r.ok) throw new Error(j.error?.message || 'Meta ' + r.status); return `Connected: ${j.verified_name || ''} ${j.display_phone_number || ''}`; } throw new Error('Enter a phone number to send a test'); } await doWa(o.to, `${brand().name}: test message`); return 'Test WhatsApp accepted for ' + o.to; },
+    async fcm() { if (!fcmFn) throw new Error('Mobile push module not ready'); return fcmFn(); },
+    async apns() { if (!apnsFn) throw new Error('iPhone push module not ready'); return apnsFn(); },
+    async ai() { if (!aiFn) throw new Error('AI module not ready'); const r = await aiFn({ emp: 'test', q: 'Reply with the single word OK.', context: 'Connectivity test only.', history: [] }); return 'Model replied: ' + r.slice(0, 60); },
+    async webhook() { await doHook(brand().name + ' test', 'Your webhook is connected. ✅', { category: 'test' }); return 'Test message delivered'; }
+  };
+  async function ipLookup(ip) {
+    const p = iv('ipgeo', 'provider'); if (p === 'off') return null;
+    try { if (p === 'ipinfo') { const t = sv('ipgeo', 'token'); const r = await fx(`https://ipinfo.io/${ip}/json${t ? '?token=' + encodeURIComponent(t) : ''}`, {}, 2500), j = await r.json(); if (!j.loc) return null; const [la, ln] = j.loc.split(',').map(Number); return { lat: la, lng: ln, city: j.city }; } const r = await fx('http://ip-api.com/json/' + ip + '?fields=status,lat,lon,city', {}, 2500), j = await r.json(); return j.status === 'success' ? { lat: j.lat, lng: j.lon, city: j.city } : null; } catch { return null; }
+  }
+
+  /* ---------- validation of saved values ---------- */
+  const HEX = /^#[0-9a-f]{6}$/i, IMG = /^data:image\/(png|jpeg|webp|svg\+xml|gif);base64,[A-Za-z0-9+/=]+$/;
+  function cleanBrand(b) {
+    const o = {}, s = (k, n) => { if (b[k] !== undefined) o[k] = String(b[k]).slice(0, n).trim(); };
+    ['name', 'product', 'short'].forEach(k => s(k, 60)); s('tagline', 160); s('loginText', 400); s('support', 120); s('footer', 160);
+    ['primary', 'accent2', 'sidebar'].forEach(k => { if (b[k] !== undefined) { if (!HEX.test(b[k])) throw new Error(k + ' must be a #RRGGBB colour'); o[k] = b[k].toLowerCase(); } });
+    if (b.radius !== undefined) o.radius = Math.min(28, Math.max(4, +b.radius || 16)); if (b.font !== undefined) { if (!FONTS.includes(b.font)) throw new Error('Unknown font'); o.font = b.font; } if (b.theme !== undefined) { if (!['light', 'dark', 'auto'].includes(b.theme)) throw new Error('Bad theme'); o.theme = b.theme; } if (b.skyline !== undefined) o.skyline = !!b.skyline;
+    if (b.features !== undefined) o.features = (Array.isArray(b.features) ? b.features : []).map(x => String(x).trim().slice(0, 80)).filter(Boolean).slice(0, 12);
+    if (b.logo !== undefined) { if (b.logo && (!IMG.test(b.logo) || b.logo.length > 420000)) throw new Error('Logo must be a PNG/JPG/WebP/SVG under ~300 KB'); o.logo = b.logo; }
+    if (b.loginBg !== undefined) { if (b.loginBg && (!IMG.test(b.loginBg) || b.loginBg.length > 1300000)) throw new Error('Login image must be under ~900 KB'); o.loginBg = b.loginBg; }
+    if (o.name === '') throw new Error('Company name cannot be empty'); return o;
+  }
+  function cleanCompany(b) {
+    const o = {}; for (const k of Object.keys(COMPANY_DEF)) if (b[k] !== undefined) o[k] = String(b[k]).slice(0, 200).trim();
+    if (o.gstin && !/^\d{2}[A-Z]{5}\d{4}[A-Z][A-Z0-9]Z[A-Z0-9]$/.test(o.gstin.toUpperCase())) throw new Error('GSTIN looks wrong (15 characters, e.g. 29ABCDE1234F1Z5)'); if (o.pan && !/^[A-Z]{5}\d{4}[A-Z]$/.test(o.pan.toUpperCase())) throw new Error('PAN looks wrong (ABCDE1234F)'); if (o.tan && !/^[A-Z]{4}\d{5}[A-Z]$/.test(o.tan.toUpperCase())) throw new Error('TAN looks wrong (ABCD12345E)'); if (o.pin && !/^\d{6}$/.test(o.pin)) throw new Error('PIN code must be 6 digits'); if (o.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(o.email)) throw new Error('Company email looks wrong');
+    ['gstin', 'pan', 'tan', 'cin'].forEach(k => { if (o[k]) o[k] = o[k].toUpperCase(); }); return o;
+  }
+  function cleanInt(id, v, clear) {
+    const cat = byId(id); if (!cat) throw new Error('Unknown integration'); const cur = C.int[id] ||= {}, sec = C.secrets[id] ||= {};
+    for (const f of cat.fields) {
+      if (!(f.k in v)) continue; let x = v[f.k];
+      if (f.secret) { if (typeof x === 'string' && x.trim() && !/^•+/.test(x)) { const t = x.trim(); if (id === 'fcm' && f.k === 'privateKey' && t.startsWith('{')) { try { const j = JSON.parse(t); if (j.project_id) cur.projectId = j.project_id; if (j.client_email) cur.clientEmail = j.client_email; sec.privateKey = String(j.private_key || '').slice(0, 4000); } catch { throw new Error('That does not look like a valid service-account JSON'); } } else sec[f.k] = t.slice(0, ['fcm', 'apns'].includes(id) ? 4000 : 600); } continue; }
+      if (f.type === 'number') { x = x === '' ? '' : +x; if (x !== '' && !isFinite(x)) throw new Error(f.label + ' must be a number'); }
+      else { x = String(x ?? '').trim().slice(0, 500); if (f.type === 'select' && x && !f.opts.includes(x)) throw new Error('Bad value for ' + f.label); if (/url|js|models/i.test(f.k) && x && !/^https?:\/\//i.test(x)) throw new Error(f.label + ' must start with http:// or https://'); if (f.k === 'models' && x && !x.endsWith('/')) x += '/'; if (id === 'ifsc' && f.k === 'url' && x && !x.endsWith('/')) x += '/'; }
+      cur[f.k] = x;
+    }
+    (clear || []).forEach(k => { if (byId(id).fields.find(f => f.k === k && f.secret)) delete sec[k]; });
+    if ('enabled' in v) cur.enabled = !!v.enabled; if (cat.notify && Array.isArray(v.notify)) C.notify[id] = v.notify.filter(x => NOTIFY_CATS.some(c => c[0] === x));
+  }
+
+  async function handle(req, res, u, p) {
+    if (p === '/api/public' && req.method === 'GET') return json(res, 200, pub()), true;
+    if (p === '/api/geocode' && req.method === 'GET') { try { return json(res, 200, await geocode(u.searchParams.get('q'))), true; } catch (e) { return json(res, 502, { error: e.message }), true; } }
+    if (p.startsWith('/api/ifsc/') && req.method === 'GET') { try { const r = await ifsc(decodeURIComponent(p.slice(10))); return r ? json(res, 200, r) : json(res, 404, { error: 'not found' }), true; } catch (e) { return json(res, 502, { error: e.message }), true; } }
+    if (p === '/api/notify' && req.method === 'POST') { const b = await readBody(req, 4e4); if (!b) return json(res, 413, { error: 'too large' }), true; return json(res, 200, await dispatch(b)), true; }
+    if (!(p === '/api/config' || p.startsWith('/api/config/') || p === '/api/integrations/test')) return false;
+    if (!adminOk(req)) return json(res, 401, { error: 'admin key required', hint: 'Find it in data/admin.key on the server' }), true;
+    try {
+      if (p === '/api/config' && req.method === 'GET') return json(res, 200, { catalog: CATALOG.map(c => ({ ...c, enabled: enabled(c.id), values: intValues(c.id), secrets: secState(c.id), notifyOn: C.notify[c.id] || [], status: C.status[c.id] || null })), notifyCats: NOTIFY_CATS, fonts: FONTS, brand: brand(), company: company(), server: { webpush: getPush().enabled, nodemailer: !!mailer, node: process.version, uptime: Math.round(process.uptime()), local: isLocal(req), strict: !!process.env.ADMIN_STRICT, keyFile: 'data/admin.key' }, sent: sentLog, push: subsInfo() }), true;
+      if (p === '/api/config' && req.method === 'POST') {
+        const b = await readBody(req); if (!b) return json(res, 413, { error: 'Too large — use a smaller image' }), true;
+        if (b.section === 'brand') { const o = cleanBrand(b.values || {}); C.brand = { ...C.brand, ...o }; save(); return json(res, 200, { ok: true, brand: brand() }), true; }
+        if (b.section === 'brand-reset') { C.brand = {}; save(); return json(res, 200, { ok: true, brand: brand() }), true; }
+        if (b.section === 'company') { const o = cleanCompany(b.values || {}); C.company = { ...C.company, ...o }; save(); return json(res, 200, { ok: true, company: company() }), true; }
+        if (b.section === 'int') { cleanInt(b.id, b.values || {}, b.clear); delete C.status[b.id]; save(); if (b.id === 'push') onPush(); return json(res, 200, { ok: true, id: b.id, values: intValues(b.id), secrets: secState(b.id), enabled: enabled(b.id) }), true; }
+        return json(res, 400, { error: 'unknown section' }), true;
+      }
+      if (p === '/api/config/vapid/regenerate' && req.method === 'POST') { const k = regenVapid(); return json(res, 200, { ok: true, key: k }), true; }
+      if (p === '/api/integrations/test' && req.method === 'POST') { const b = await readBody(req, 2e4); const id = b?.id; if (!TESTS[id]) return json(res, 400, { error: 'unknown' }), true; const t0 = Date.now(); let out; try { out = { ok: true, detail: await TESTS[id]({ to: String(b.to || '').slice(0, 120) }) }; } catch (e) { out = { ok: false, detail: String(e.message || e).slice(0, 240) }; } out.at = Date.now(); out.ms = Date.now() - t0; C.status[id] = out; save(); return json(res, 200, out), true; }
+    } catch (e) { return json(res, 400, { error: String(e.message || e) }), true; }
+    return false;
+  }
+  return { handle, ipLookup, ipKm: () => +iv('ipgeo', 'mismatchKm') || 400, pushSubject: () => iv('push', 'subject') || 'mailto:hr@example.com', pushTtl: () => +iv('push', 'ttl') || 3600, adminKey: () => KEY, dispatch, api: { iv, sv, enabled, doWa, fx, brand, adminOk, setAi: f => { aiFn = f; }, setFcm: f => { fcmFn = f; }, setApns: f => { apnsFn = f; } } };
+};

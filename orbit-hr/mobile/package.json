@@ -1,0 +1,45 @@
+{
+  "name": "orbit-hrms-mobile",
+  "version": "1.0.0",
+  "description": "Android + iOS apps for Orbit HRMS (Capacitor)",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/setup.js",
+    "www": "node scripts/build-www.js",
+    "sync": "npm run www && npx cap sync",
+    "icons": "node scripts/icons.js",
+    "android:tools": "node scripts/android-tools.js",
+    "android:apk": "node scripts/android.js apk",
+    "android:aab": "node scripts/android.js aab",
+    "android:open": "npx cap open android",
+    "ios:open": "npx cap open ios",
+    "ios:sync": "npx cap sync ios"
+  },
+  "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^10.0.0",
+    "@capacitor-community/background-geolocation": "^1.3.1",
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/app": "^8.1.2",
+    "@capacitor/browser": "^8.0.5",
+    "@capacitor/camera": "^8.2.6",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
+    "@capacitor/device": "^8.0.3",
+    "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/geolocation": "^8.2.4",
+    "@capacitor/haptics": "^8.0.2",
+    "@capacitor/ios": "^8.6.0",
+    "@capacitor/keyboard": "^8.0.6",
+    "@capacitor/local-notifications": "^8.3.1",
+    "@capacitor/network": "^8.0.1",
+    "@capacitor/preferences": "^8.0.1",
+    "@capacitor/push-notifications": "^8.1.3",
+    "@capacitor/share": "^8.0.3",
+    "@capacitor/splash-screen": "^8.0.2",
+    "@capacitor/status-bar": "^8.0.4",
+    "capacitor-native-settings": "^8.2.0"
+  },
+  "devDependencies": {
+    "@capacitor/assets": "^4.0.0"
+  }
+}

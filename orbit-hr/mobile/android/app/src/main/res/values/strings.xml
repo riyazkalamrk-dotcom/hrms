@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Orbit HRMS</string>
+    <string name="title_activity_main">Orbit HRMS</string>
+    <string name="package_name">in.orbit.hrms</string>
+    <string name="custom_url_scheme">in.orbit.hrms</string>
+</resources>

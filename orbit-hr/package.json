@@ -1,0 +1,1 @@
+{"name":"orbit-hr","version":"1.0.0","private":true,"description":"Orbit Realty HRMS","scripts":{"start":"node server.js"},"dependencies":{"nodemailer":"^10.5.0","web-push":"^4.0.0"}}
