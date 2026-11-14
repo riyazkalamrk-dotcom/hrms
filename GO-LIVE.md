@@ -109,9 +109,14 @@ On the same page you can:
 
 Building the Android app after uploading the Firebase file: `npm run setup` fetches it from your server. If the build runs on another machine, add `--adminkey` followed by the contents of `orbit-hr/data/admin.key`. For GitHub builds, add the repository secret `ORBIT_ADMIN_KEY`.
 
-### 4b. Company letterhead
+### 4b. Company letterhead (Letterhead page)
 
-Payslips, every generated letter (offer, appointment, increment, experience, relieving), the employment letter and policy printouts all print on one letterhead. It is built from **Settings → Branding** (logo, brand colour) and **Settings → Company profile** (legal name, address, phone, email, website, CIN, GSTIN, PAN, TAN, PF, ESIC, RERA, signatory). Fill those in once and every document uses them. Empty fields are left out.
+Payslips, every generated letter (offer, appointment, increment, experience, relieving), the employment letter and policy printouts all print on one letterhead. HR and admins manage it from **Letterhead** in the side menu.
+
+- **Your own design:** press **Upload letterhead** and choose a PDF, PNG or JPG of one A4 page (portrait). The top and bottom margins are detected automatically; change them if text touches the artwork. Press **Replace letterhead** to swap it or **Remove** to stop using it.
+- **Generated letterhead:** with nothing uploaded, the app builds one from **Settings → Branding** (logo, brand colour) and **Settings → Company profile** (legal name, address, phone, email, website, CIN, GSTIN, PAN, TAN, PF, ESIC, RERA). Empty fields are left out.
+- **Signature block:** the signatory name, title and the "For <company>" line always come from the company profile, so fill that in even when you upload your own design.
+- The uploaded file is stored on the server in `orbit-hr/data/` and is included when you back that folder up.
 
 ---
 
