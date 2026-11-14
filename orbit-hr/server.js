@@ -97,8 +97,9 @@ const ymd = d => d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0
 const hmm = t => { const [h, m] = String(t || '0:0').split(':').map(Number); return h * 60 + m; };
 async function sendPush(emps, payload, reason) {
   let delivered = 0; const body = JSON.stringify(payload);
-  if (webpush) for (const id of emps) { const rec = ST.subs[id]; if (!rec) continue; for (const sub of [...rec.list]) { try { await webpush.sendNotification(sub, body, { TTL: CFGM.pushTtl(), urgency: 'high' }); delivered++; } catch (e) { if (e.statusCode === 404 || e.statusCode === 410) rec.list = rec.list.filter(x => x.endpoint !== sub.endpoint); } } }
-  try { delivered += await BOT.sendNative(emps, payload); } catch { }
+  if (NOTIF.muted(reason)) { ST.plog.unshift({ ts: Date.now(), to: emps.join(','), title: payload.title, reason: reason + ' (quiet hours — not sent)', delivered: 0 }); ST.plog.length = Math.min(ST.plog.length, 120); persist(); return 0; }
+  if (webpush && NOTIF.ch('web')) for (const id of emps) { const rec = ST.subs[id]; if (!rec) continue; for (const sub of [...rec.list]) { try { await webpush.sendNotification(sub, body, { TTL: CFGM.pushTtl(), urgency: 'high' }); delivered++; } catch (e) { if (e.statusCode === 404 || e.statusCode === 410) rec.list = rec.list.filter(x => x.endpoint !== sub.endpoint); } } }
+  try { delivered += await BOT.sendNative(emps, payload, { android: !NOTIF.ch('android'), ios: !NOTIF.ch('ios') }); } catch { }
   ST.plog.unshift({ ts: Date.now(), to: emps.join(','), title: payload.title, reason, delivered }); ST.plog.length = Math.min(ST.plog.length, 120); persist(); return delivered;
 }
 const hrIds = () => [...new Set([...Object.entries(ST.subs), ...Object.entries(ST.devices || {})].filter(([, r]) => ['hr', 'admin'].includes(r.role)).map(([id]) => id))];
@@ -106,16 +107,18 @@ async function toEmp(p, title, text, tag) { push('alert', { to: p.emp, title, bo
 async function toHR(p, title, text, tag) { push('alert', { toRoles: ['hr', 'admin'], toEmp: p.mgr, title, body: text, tag }); if (webpush || BOT.nativeOn()) await sendPush([...new Set([...hrIds(), ...(p.mgr ? [p.mgr] : [])])].filter(x => x !== p.emp), { title, body: text, tag, url: '/#/alerts' }, 'hr'); else { ST.plog.unshift({ ts: Date.now(), to: 'HR', title, reason: 'hr (push disabled)', delivered: 0 }); } }
 function once(p, key, fn) { const k = p.emp + ':' + p.date + ':' + key; if (ST.sent[k]) return; ST.sent[k] = 1; persist(); fn(); }
 function schedulerTick(now = new Date()) {
-  const date = ymd(now), nm = now.getHours() * 60 + now.getMinutes(); for (const k of Object.keys(ST.sent)) if (!k.includes(date)) delete ST.sent[k];
+  const date = ymd(now), nm = now.getHours() * 60 + now.getMinutes(), T = NOTIF.timing(); for (const k of Object.keys(ST.sent)) if (!k.includes(date)) delete ST.sent[k];
   for (const p of Object.values(ST.pres)) {
     if (p.date !== date || p.off || p.status === 'Exited') continue; const s = hmm(p.start), e = hmm(p.end), before = +p.before || 15;
+    /* wording, on/off and timing of every reminder come from the admin panel (server_notify.js) */
+    const say = (key, hr, vars, tag) => { const m = NOTIF.text(key, { name: p.name, start: p.start, end: p.end, ...vars }); if (m) (hr ? toHR : toEmp)(p, m.title, m.body, tag); };
     if (!p.inTime) {
-      if (nm >= s - before && nm < s) once(p, 'pre', () => toEmp(p, '⏰ Duty starts at ' + p.start, 'Starts in ' + (s - nm) + ' min — check in when you arrive.', 'pre-' + p.emp));
-      if (nm >= s && nm < s + 15) once(p, 'start', () => toEmp(p, '🟢 Your duty has started', 'Please check in now.', 'start-' + p.emp));
-      if (nm >= s + 15) { const n = Math.floor((nm - s - 15) / 10); once(p, 'late' + n, () => { toEmp(p, '⚠ You have not checked in', 'Duty began at ' + p.start + ' — you are ' + (nm - s) + ' min late.', 'late-' + p.emp); if (n === 0) toHR(p, '⚠ ' + p.name + ' has not checked in', 'Shift started ' + p.start + ' (' + (nm - s) + ' min ago).', 'hrlate-' + p.emp); }); }
+      if (nm >= s - before && nm < s) once(p, 'pre', () => say('pre', false, { mins: s - nm }, 'pre-' + p.emp));
+      if (nm >= s && nm < s + 15) once(p, 'start', () => say('start', false, {}, 'start-' + p.emp));
+      if (nm >= s + 15) { const n = Math.floor((nm - s - 15) / T.lateEvery); once(p, 'late' + n, () => { if (n < T.lateMax) say('late', false, { mins: nm - s }, 'late-' + p.emp); if (n === 0) say('lateHR', true, { mins: nm - s }, 'hrlate-' + p.emp); }); }
     } else if (!p.outTime) {
-      if (nm >= e) { const n = Math.floor((nm - e) / 15); if (n < 6) once(p, 'out' + n, () => toEmp(p, '🔔 Remember to check out', 'Duty ended at ' + p.end + (nm > e ? ' (' + (nm - e) + ' min ago)' : '') + '.', 'out-' + p.emp)); }
-      if (nm >= e + 120) once(p, 'missed', () => toHR(p, '🕒 ' + p.name + ' missed check-out', 'Shift ended ' + p.end + ' and no check-out is recorded.', 'hrmiss-' + p.emp));
+      if (nm >= e) { const n = Math.floor((nm - e) / T.outEvery); if (n < T.outMax) once(p, 'out' + n, () => say('out', false, { mins: nm - e }, 'out-' + p.emp)); }
+      if (nm >= e + T.missedAfter) once(p, 'missed', () => say('missedHR', true, {}, 'hrmiss-' + p.emp));
     }
   }
 }
@@ -129,18 +132,20 @@ const str = (v, n) => String(v ?? '').slice(0, n);
 /* origins the Android / iOS apps run from (+ any in CORS_ORIGINS, comma separated) */
 const APP_ORIGINS = new Set(['capacitor://localhost', 'ionic://localhost', 'https://localhost', 'http://localhost', ...(process.env.CORS_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean)]);
 const SDB = require('./server_db.js')(DATA, json);
+const NOTIF = require('./server_notify.js')(DATA, json, { ST, persist, cfg: CFGM.api, who: req => SDB.who(req), people: () => SDB.people(), note: (ids, msg) => SDB.note(ids, msg), sendPush: (...a) => sendPush(...a), sse: (ev, d) => { if (Array.isArray(d.toList)) { const { toList, ...rest } = d; toList.slice(0, 2000).forEach(to => push(ev, { to, ...rest })); } else push(ev, d); }, webpushOn: () => !!webpush });
 http.createServer(async (req, res) => {
   const u = new URL(req.url, 'http://x'), p = u.pathname;
   { const o = req.headers.origin; if (o && APP_ORIGINS.has(o)) { res.setHeader('Access-Control-Allow-Origin', o); res.setHeader('Vary', 'Origin'); res.setHeader('Access-Control-Allow-Headers', 'Content-Type, x-admin-key, x-orbit-token'); res.setHeader('Access-Control-Allow-Methods', 'GET,POST,DELETE,OPTIONS'); if (req.method === 'OPTIONS') { res.writeHead(204); return res.end(); } } }
   try {
     if (p.startsWith('/api/db/') && await SDB.handle(req, res, u, p)) return;
+    if (p.startsWith('/api/notif/') && await NOTIF.handle(req, res, u, p)) return;
     if (p.startsWith('/api/') && await CFGM.handle(req, res, u, p)) return;
     if ((p.startsWith('/api/') || p === '/manifest.webmanifest' || p.startsWith('/pwa/')) && await BOT.handle(req, res, u, p)) return;
     /* app download page + the Android APK (only this one file from mobile/dist is public) */
     if (p === '/downloads/OrbitHRMS.apk') { const f = path.join(ROOT, 'mobile', 'dist', 'OrbitHRMS-debug.apk'); if (!fs.existsSync(f)) { res.writeHead(404); return res.end('APK not built yet'); } res.writeHead(200, { 'Content-Type': 'application/vnd.android.package-archive', 'Content-Disposition': 'attachment; filename="OrbitHRMS.apk"', 'Content-Length': fs.statSync(f).size, 'Cache-Control': 'no-cache' }); return fs.createReadStream(f).pipe(res); }
     if (p === '/app') { const b = CFGM.api.brand(), has = fs.existsSync(path.join(ROOT, 'mobile', 'dist', 'OrbitHRMS-debug.apk')), esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-cache' }); return res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Get the ${esc(b.name)} app</title><meta name="theme-color" content="${b.primary}"><style>*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:20px;font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:linear-gradient(160deg,${b.sidebar},${b.primary});color:#0f1b2d}.c{width:min(440px,100%);background:#fff;border-radius:26px;padding:28px 24px;text-align:center;box-shadow:0 30px 80px -30px #000a}img.i{width:84px;height:84px;border-radius:20px;box-shadow:0 10px 26px -10px #0006}h1{margin:14px 0 4px;font-size:22px}p{color:#667085;margin:4px 0 16px;font-size:14px}a.b{display:block;padding:15px;border-radius:14px;background:${b.primary};color:#fff;font-weight:700;text-decoration:none;margin:10px 0}a.g{background:#f1f3f7;color:#0f1b2d}small{display:block;color:#667085;line-height:1.5;margin-top:12px;text-align:left}ol{text-align:left;color:#475467;font-size:13px;padding-left:20px;line-height:1.7}#qr{display:flex;justify-content:center;margin:14px 0}</style></head><body><div class="c"><img class="i" src="/pwa/icon-192.png" alt=""><h1>${esc(b.name)} ${esc(b.product)}</h1><p>Attendance, leave, payslips and alerts on your phone</p>${has ? '<a class="b" href="/downloads/OrbitHRMS.apk">⬇ Download for Android (APK)</a>' : '<p>The Android app has not been built yet.</p>'}<a class="b g" href="/">📱 Open in browser / iPhone</a><div id="qr"></div><ol><li>Tap <b>Download</b>, then open the file.</li><li>If Android asks, allow <b>“Install from this source”</b>.</li><li>Open the app and sign in.</li></ol><small><b>iPhone:</b> open this site in Safari → Share → <b>Add to Home Screen</b>. It then works like an app.<br><b>Note:</b> this is a test build — Android may show a “not from Play Store” warning.</small></div><script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script><script>try{new QRCode(document.getElementById('qr'),{text:location.href,width:150,height:150})}catch(e){}</script></body></html>`); }
     if (p === '/api/push/key') return json(res, 200, { enabled: !!webpush, key: VAPID?.publicKey || null });
-    if (p === '/api/push/subscribe' && req.method === 'POST') { const b = await body(req); if (!b.emp || !b.sub?.endpoint) return json(res, 400, { error: 'bad subscription' }); const rec = ST.subs[b.emp] ||= { role: 'employee', list: [] }; rec.role = str(b.role, 12); rec.list = rec.list.filter(x => x.endpoint !== b.sub.endpoint); rec.list.push(b.sub); persist(); return json(res, 200, { ok: true, devices: rec.list.length }); }
+    if (p === '/api/push/subscribe' && req.method === 'POST') { const b = await body(req); if (!b.emp || !b.sub?.endpoint) return json(res, 400, { error: 'bad subscription' }); const rec = ST.subs[b.emp] ||= { role: 'employee', list: [] }; rec.role = str(b.role, 12); rec.list = rec.list.filter(x => x.endpoint !== b.sub.endpoint); rec.list.push({ ...b.sub, ts: Date.now() }); persist(); return json(res, 200, { ok: true, devices: rec.list.length }); }
     if (p === '/api/push/unsubscribe' && req.method === 'POST') { const b = await body(req); const rec = ST.subs[b.emp]; if (rec) rec.list = b.endpoint ? rec.list.filter(x => x.endpoint !== b.endpoint) : []; persist(); return json(res, 200, { ok: true }); }
     if (p === '/api/push/send' && req.method === 'POST') { const b = await body(req); const to = b.to === 'HR' ? hrIds() : [str(b.to, 20)]; const payload = { title: str(b.title, 90), body: str(b.body, 240), tag: str(b.tag, 60) || 'msg', url: '/#/alerts' }; push('alert', { to: b.to === 'HR' ? undefined : b.to, toRoles: b.to === 'HR' ? ['hr', 'admin'] : undefined, ...payload }); const n = webpush ? await sendPush(to, payload, 'manual') : 0; return json(res, 200, { ok: true, delivered: n }); }
     if (p === '/api/presence' && req.method === 'POST') { const b = await body(req); const list = Array.isArray(b.list) ? b.list : [b]; for (const x of list.slice(0, 500)) { if (!x.emp || !x.date) continue; ST.pres[x.emp] = { emp: str(x.emp, 20), name: str(x.name, 80), role: str(x.role, 12), mgr: str(x.mgr, 20), date: str(x.date, 10), start: str(x.start, 5), end: str(x.end, 5), inTime: x.inTime ? str(x.inTime, 5) : '', outTime: x.outTime ? str(x.outTime, 5) : '', off: !!x.off, before: +x.before || 15, status: str(x.status, 20) }; } persist(); schedulerTick(); return json(res, 200, { ok: true, n: list.length }); }
@@ -159,7 +164,7 @@ http.createServer(async (req, res) => {
     if (p.startsWith('/api/')) return json(res, 404, { error: 'not found' });
     // static
     let f = path.normalize(path.join(ROOT, p === '/' ? 'index.html' : decodeURIComponent(p)));
-    if (!f.startsWith(ROOT) || f.startsWith(DATA) || f.startsWith(path.join(ROOT, 'mobile')) || f.startsWith(path.join(ROOT, 'node_modules')) || ['server.js', 'server_cfg.js', 'server_bot.js', 'server_db.js'].includes(path.basename(f))) { res.writeHead(403); return res.end('Forbidden'); }
+    if (!f.startsWith(ROOT) || f.startsWith(DATA) || f.startsWith(path.join(ROOT, 'mobile')) || f.startsWith(path.join(ROOT, 'node_modules')) || ['server.js', 'server_cfg.js', 'server_bot.js', 'server_db.js', 'server_notify.js'].includes(path.basename(f))) { res.writeHead(403); return res.end('Forbidden'); }
     fs.readFile(f, (e, d) => { if (e) { res.writeHead(404); return res.end('Not found'); } res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'application/octet-stream', 'Cache-Control': 'no-cache' }); res.end(d); });
   } catch (e) { json(res, 500, { error: String(e.message) }); }
 }).listen(PORT, () => console.log('Orbit HR server on http://localhost:' + PORT));

@@ -107,11 +107,11 @@ module.exports = function init(A, ctx) {
     });
   }
   async function apnsSend(token, payload) { const first = A.iv('apns', 'environment') === 'sandbox'; let r = await apnsOnce(token, payload, first); if (r.status === 400 && r.reason === 'BadDeviceToken') { const r2 = await apnsOnce(token, payload, !first); if (r2.status === 200) r = r2; } return { ok: r.status === 200, status: r.status, reason: r.reason }; }
-  async function sendNative(emps, payload) {
+  async function sendNative(emps, payload, off = {}) {
     if (!nativeOn()) return 0; let n = 0;
     for (const id of emps) { const rec = ST.devices[id]; if (!rec) continue; for (const d of [...rec.list]) { try {
-      if (d.platform === 'ios') { if (!apnsOn()) continue; const r = await apnsSend(d.token, payload); if (r.ok) n++; else if (r.status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(r.reason)) rec.list = rec.list.filter(x => x.token !== d.token); }
-      else { if (!fcmOn()) continue; const r = await fcmSend(d.token, payload); if (r.ok) n++; else if (r.status === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(JSON.stringify(r.err || ''))) rec.list = rec.list.filter(x => x.token !== d.token); }
+      if (d.platform === 'ios') { if (!apnsOn() || off.ios) continue; const r = await apnsSend(d.token, payload); if (r.ok) n++; else if (r.status === 410 || ['BadDeviceToken', 'Unregistered', 'DeviceTokenNotForTopic'].includes(r.reason)) rec.list = rec.list.filter(x => x.token !== d.token); }
+      else { if (!fcmOn() || off.android) continue; const r = await fcmSend(d.token, payload); if (r.ok) n++; else if (r.status === 404 || /UNREGISTERED|INVALID_ARGUMENT/.test(JSON.stringify(r.err || ''))) rec.list = rec.list.filter(x => x.token !== d.token); }
     } catch { } } }
     persist(); return n;
   }

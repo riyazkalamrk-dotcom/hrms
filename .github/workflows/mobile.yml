@@ -15,6 +15,8 @@
 #   ORBIT_IOS_PROFILE_NAME  name of the App Store provisioning profile
 #
 # SECRETS needed only for the optional jobs (same Settings page → Secrets)
+#   ORBIT_ADMIN_KEY  (optional) contents of data/admin.key on your server — the build then fetches the Firebase app file from
+#                    Notification centre → Android, so Android push is switched on without committing the file
 #   Android: ANDROID_KEYSTORE_B64, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD, GOOGLE_SERVICES_JSON
 #   iPhone : IOS_CERT_P12_B64, IOS_CERT_PASSWORD, IOS_PROFILE_B64, APPSTORE_KEY_ID, APPSTORE_ISSUER_ID, APPSTORE_KEY_P8
 #            (these come from a paid Apple Developer account)
@@ -31,6 +33,7 @@ env:
   APP_NAME: ${{ vars.ORBIT_APP_NAME || 'Orbit HRMS' }}
   ORBIT_VERSION: 1.0.${{ github.run_number }}
   ORBIT_VERSION_CODE: ${{ github.run_number }}
+  ORBIT_ADMINKEY: ${{ secrets.ORBIT_ADMIN_KEY }}   # optional: lets the build fetch google-services.json uploaded in the admin panel
 jobs:
   android-debug:
     runs-on: ubuntu-latest

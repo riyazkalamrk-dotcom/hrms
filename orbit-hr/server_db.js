@@ -175,5 +175,8 @@ module.exports = function (DATA, json) {
     }
     return json(res, 404, { error: 'not found' }), true;
   }
-  return { handle, flush };
+  const people = () => emps().map(e => ({ id: e.id, name: e.name, role: e.role, dept: e.dept, branch: e.branch, status: e.status, mgr: e.mgr }));
+  /* in-app notifications written by the server (broadcasts) */
+  function note(ids, msg) { if (!M.db) return; const ops = ids.map((id, i) => ({ p: ['notes'], k: 'i:s' + Date.now().toString(36) + i, v: { id: 's' + Date.now().toString(36) + i, to: id, msg: String(msg).slice(0, 400), ts: Date.now(), read: false }, at: 's' })); const done = ops.filter(o => Ops.apply(M.db, o)); commit(done, 'server'); }
+  return { handle, flush, who, people, note };
 };

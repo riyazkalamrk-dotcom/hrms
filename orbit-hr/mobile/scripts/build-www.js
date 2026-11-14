@@ -7,7 +7,7 @@ const root = path.resolve(__dirname, '..');
 const web = path.resolve(arg('web') || (fs.existsSync(path.join(root, '..', 'index.html')) ? path.join(root, '..') : ''));
 if (!web || !fs.existsSync(path.join(web, 'index.html'))) { console.error('✖ Cannot find the Orbit web app. Pass --web <folder with index.html>.'); process.exit(1); }
 const server = (arg('server') || '').replace(/\/+$/, ''), version = arg('version') || require(path.join(root, 'package.json')).version || '1.0.0', out = path.join(root, 'www');
-const SKIP = new Set(['server.js', 'server_cfg.js', 'server_bot.js', 'server_db.js', 'package.json', 'package-lock.json', 'data', 'node_modules', 'mobile', '.git', '.github', 'README.md']);
+const SKIP = new Set(['server.js', 'server_cfg.js', 'server_bot.js', 'server_db.js', 'server_notify.js', 'package.json', 'package-lock.json', 'data', 'node_modules', 'mobile', '.git', '.github', 'README.md']);
 fs.rmSync(out, { recursive: true, force: true }); fs.mkdirSync(out, { recursive: true });
 let n = 0; (function copy(src, dst) { for (const f of fs.readdirSync(src, { withFileTypes: true })) { if (SKIP.has(f.name) || /\.(out|log|md)$/.test(f.name)) continue; const s = path.join(src, f.name), d = path.join(dst, f.name); if (f.isDirectory()) { fs.mkdirSync(d, { recursive: true }); copy(s, d); } else { fs.copyFileSync(s, d); n++; } } })(web, out);
 /* bundled app has no /manifest.webmanifest or /pwa icons on its own origin */

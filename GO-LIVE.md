@@ -21,6 +21,7 @@ Read section 1 before giving the app to staff. It explains one limit that decide
 - **Uploaded files are not shared yet.** KYC document scans, policy attachments and letter files stay on the device that uploaded them. The records about them are shared; the files are not.
 - **Team chat and live tracking** do not check who is sending. Treat chat as non-confidential.
 - **Server rules are broad, not field by field.** They stop the cases listed above, but a technically skilled employee could still alter some of their own records, for example their own attendance times. HR should review the audit log and flagged punches.
+- **Notifications on phones need an `https://` address.** On your office Wi-Fi address (`http://192.168…`) browsers and iPhones refuse them.
 - **"Forgot password" does not send an email.** HR or an admin opens the person's profile and presses Reset password, which shows a new temporary password once.
 - **Two people editing the same record at the same moment:** the last save wins for that record.
 - The iPhone app cannot be installed on real phones until you have an Apple Developer account.
@@ -86,8 +87,31 @@ Do these in order.
 | Web push | Reminders when the app is closed | Built in |
 | Email (SMTP) | Emailing alerts and payslips | Your mail provider's SMTP |
 | SMS / WhatsApp | Text and WhatsApp alerts | Paid providers (MSG91, Twilio, Meta) |
-| Mobile push (Firebase) / iPhone push (Apple) | Push in the Android and iPhone apps | Firebase is free; Apple needs a developer account |
+| Mobile push (Firebase) / iPhone push (Apple) | Push in the Android and iPhone apps | Set these up from the **Notification centre** page (section 4a) |
 | AI assistant | Chat answers from your policies | Needs a paid API key; works in basic mode without one |
+
+### 4a. Notifications (Notification centre page)
+
+Everything about notifications is controlled from **Notification centre** in the side menu (HR and admins only).
+
+| Who | How they get notifications | What you need |
+|---|---|---|
+| Computers and Android phones in a browser | Web Push | Nothing extra. Works once the app is on an `https://` address |
+| iPhones **without** an Apple Developer account | Web Push from the installed web app | An `https://` address. Each person opens it in Safari, taps Share → **Add to Home Screen**, opens the app from the new icon, then taps Enable push alerts. Needs iOS 16.4 or newer. The app shows these steps itself if something is missing |
+| Android app | Firebase Cloud Messaging (free) | Step 1: paste the Firebase service-account key. Step 2: upload `google-services.json`. Step 3: rebuild and reinstall the app |
+| iPhone app from the App Store or TestFlight | Apple Push | A paid Apple Developer account and its push key (.p8) |
+
+On the same page you can:
+
+- **Reminders:** switch each automatic reminder on or off, change its wording and timing, and set quiet hours.
+- **Send a message:** to everyone, a role, a department, a location or one person. It appears in the in-app bell and as a push notification.
+- **Devices and log:** see which devices are registered, test or remove one, and see what was sent and whether it was delivered.
+
+Building the Android app after uploading the Firebase file: `npm run setup` fetches it from your server. If the build runs on another machine, add `--adminkey` followed by the contents of `orbit-hr/data/admin.key`. For GitHub builds, add the repository secret `ORBIT_ADMIN_KEY`.
+
+### 4b. Company letterhead
+
+Payslips, every generated letter (offer, appointment, increment, experience, relieving), the employment letter and policy printouts all print on one letterhead. It is built from **Settings → Branding** (logo, brand colour) and **Settings → Company profile** (legal name, address, phone, email, website, CIN, GSTIN, PAN, TAN, PF, ESIC, RERA, signatory). Fill those in once and every document uses them. Empty fields are left out.
 
 ---
 

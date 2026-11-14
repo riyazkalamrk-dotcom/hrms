@@ -11,6 +11,8 @@ if (!/^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)+$/i.test(id)) { console.error('✖ App
 cfg.appName = name; cfg.appId = id; cfg.android.backgroundColor = color; cfg.ios.backgroundColor = color; cfg.plugins.SplashScreen.backgroundColor = color; cfg.plugins.StatusBar.backgroundColor = color; cfg.plugins.LocalNotifications.iconColor = color;
 const clear = /^http:\/\//i.test(server); cfg.server.cleartext = clear; cfg.android.allowMixedContent = clear; fs.writeFileSync(cfgFile, JSON.stringify(cfg, null, 2) + '\n');
 console.log(`\n▶ ${name} (${id})  server: ${server || '(asked on first launch)'}${clear ? '  ⚠ http:// — development only, use https:// for real users' : ''}\n`);
+/* Firebase app file uploaded in the admin panel (Notifications → Firebase) — fetched first so this build switches Android push on */
+{ const fb = arg('iconserver', server); try { run('node scripts/firebase-fetch.js' + (fb ? ' --server "' + fb + '"' : '') + (arg('adminkey', '') ? ' --adminkey "' + arg('adminkey', '') + '"' : '')); } catch { } }
 run(`node scripts/build-www.js ${web ? `--web "${web}"` : ''} --server "${server}"`);
 const hasA = fs.existsSync(path.join(root, 'android')), hasI = fs.existsSync(path.join(root, 'ios'));
 if (only !== 'ios' && !hasA) run('npx cap add android');
